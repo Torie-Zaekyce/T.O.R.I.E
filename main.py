@@ -12,7 +12,7 @@ import os
 # ---- Config ----
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")   # from Railway variables
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")    # from Railway variables
-GROQ_MODEL    = "mixtral-8x7b-32768"         # fast + free on Groq
+GROQ_MODEL    = "llama-3.3-70b-versatile"         # fast + free on Groq
 
 # ---- T.O.R.I.E.'s Full Personality ----
 # This system prompt IS her training — everything from your
