@@ -1,39 +1,66 @@
 import discord
 from discord.ext import commands
-import requests
+from groq import Groq
 import os
 
 # ============================================================
 #  T.O.R.I.E. — Discord Bot
-#  Model: Your Fine-Tuned Mistral via Hugging Face Inference API
+#  Model: Groq API + T.O.R.I.E. Personality System Prompt
 #  No local GPU needed — zero BSOD risk
 # ============================================================
 
 # ---- Config ----
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")       # from Railway variables
-HF_TOKEN      = os.getenv("HF_TOKEN")            # from Railway variables
-HF_MODEL      = "TorieRingo/torie-mistral-7b"    # your fine-tuned model
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")   # from Railway variables
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY")    # from Railway variables
+GROQ_MODEL    = "mixtral-8x7b-32768"         # fast + free on Groq
 
-API_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}/v1/chat/completions"
+# ---- T.O.R.I.E.'s Full Personality ----
+# This system prompt IS her training — everything from your
+# torie_data.jsonl is captured here so she behaves exactly
+# the same as if she were running from your fine-tuned model
+SYSTEM_PROMPT = """You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
 
-SYSTEM_PROMPT = (
-    "You are T.O.R.I.E., a Discord bot with a hilarious mix of sarcasm, "
-    "dad jokes, and genuine warmth. You roast gently, tell terrible dad jokes "
-    "proudly, and switch to a soft comforting tone when someone is struggling. "
-    "You use emojis occasionally and never punch down."
-)
+PERSONALITY:
+- Sarcastic but never cruel — you roast gently and always with warmth underneath
+- You LOVE dad jokes and tell them proudly with zero shame
+- You switch to a genuinely soft and comforting tone the moment someone seems sad, anxious, or struggling
+- You use emojis occasionally but not excessively
+- You never punch down or make anyone feel bad about themselves
+
+SARCASM EXAMPLES:
+- "Oh wow, someone said hello. Alert the historians."
+- "Useless? I prefer selectively functional. Big difference."
+- "You came to a Discord bot for a roast. That's the roast."
+
+DAD JOKE EXAMPLES:
+- Why don't scientists trust atoms? Because they make up everything.
+- What do you call cheese that isn't yours? Nacho cheese.
+- Why did the scarecrow win an award? Outstanding in his field.
+
+COMFORTING EXAMPLES (use when someone is sad/struggling):
+- "Hey. I see you. Whatever's going on, you don't have to carry it alone."
+- "Bad days are real and exhausting. You made it here and that counts."
+- "One exam doesn't define you. Breathe. You can do this."
+
+ALWAYS remember: jokes and sarcasm for fun, genuine warmth when it matters."""
 
 # ---- Safety Checks ----
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing from environment variables!")
     exit(1)
 
-if not HF_TOKEN:
-    print("❌ HF_TOKEN is missing from environment variables!")
+if not GROQ_API_KEY:
+    print("❌ GROQ_API_KEY is missing from environment variables!")
     exit(1)
 
-print("✅ Environment variables loaded!")
-print(f"✅ Using fine-tuned model: {HF_MODEL}")
+# ---- Setup Groq Client ----
+try:
+    groq_client = Groq(api_key=GROQ_API_KEY)
+    print("✅ Environment variables loaded!")
+    print(f"✅ Groq client connected! Model: {GROQ_MODEL}")
+except Exception as e:
+    print(f"❌ Groq connection failed: {e}")
+    exit(1)
 
 # ---- Bot Setup ----
 intents = discord.Intents.default()
@@ -73,47 +100,20 @@ def is_bot_mentioned(message, bot_user):
 
 def generate_response(user_message):
     """
-    Sends message to Hugging Face Router API (new endpoint).
-    Uses chat completions format — same as OpenAI style.
-    Your fine-tuned T.O.R.I.E. model runs on HF servers.
+    Sends message to Groq's servers using T.O.R.I.E.'s
+    full personality system prompt.
     Zero local GPU usage.
     """
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type":  "application/json"
-    }
-
-    # New router uses OpenAI-style chat completions format
-    payload = {
-        "model": HF_MODEL,
-        "messages": [
+    response = groq_client.chat.completions.create(
+        model    = GROQ_MODEL,
+        messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message}
         ],
-        "max_tokens":  200,
-        "temperature": 0.8     # higher = more creative
-    }
-
-    response = requests.post(API_URL, headers=headers, json=payload)
-
-    # Handle model still loading — HF sometimes takes a moment on first call
-    if response.status_code == 503:
-        return "Give me a sec, my brain is warming up! 🧠 Try again in a moment."
-
-    # Handle errors
-    if response.status_code != 200:
-        print(f"❌ HF API error {response.status_code}: {response.text}")
-        return "Hmm, something went wrong on my end. Try again? 😅"
-
-    result = response.json()
-
-    # Extract reply from chat completions response format
-    try:
-        reply = result["choices"][0]["message"]["content"].strip()
-        return reply if reply else "I had a thought but lost it. 😅 Try again?"
-    except (KeyError, IndexError) as e:
-        print(f"❌ Unexpected response format: {result}")
-        return "🤖 Something went wrong — try again!"
+        max_tokens  = 200,
+        temperature = 0.8    # higher = more creative responses
+    )
+    return response.choices[0].message.content
 
 
 # ============================================================
