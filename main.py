@@ -127,7 +127,7 @@ async def on_ready():
     print(f"   Bot ID           : {bot.user.id}")
     print(f"   Regular mention  : <@{bot.user.id}>")
     print(f"   Nickname mention : <@!{bot.user.id}>")
-    print(f"   AI Model         : {HF_MODEL} via Hugging Face")
+    print(f"   AI Model         : {GROQ_MODEL} via Groq")
 
 
 @bot.event
