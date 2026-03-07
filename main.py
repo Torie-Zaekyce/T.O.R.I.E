@@ -14,7 +14,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")       # from Railway variables
 HF_TOKEN      = os.getenv("HF_TOKEN")            # from Railway variables
 HF_MODEL      = "TorieRingo/torie-mistral-7b"    # your fine-tuned model
 
-API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+API_URL = f"https://router.huggingface.co/models/{HF_MODEL}"
 
 SYSTEM_PROMPT = (
     "You are T.O.R.I.E., a Discord bot with a hilarious mix of sarcasm, "
