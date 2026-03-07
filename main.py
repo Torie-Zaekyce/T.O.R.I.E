@@ -1,48 +1,39 @@
 import discord
 from discord.ext import commands
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
+import requests
+import os
 
 # ============================================================
 #  T.O.R.I.E. — Discord Bot
-#  Model: Fine-Tuned Mistral 7B (Hugging Face)
+#  Model: Your Fine-Tuned Mistral via Hugging Face Inference API
+#  No local GPU needed — zero BSOD risk
 # ============================================================
 
 # ---- Config ----
-HF_MODEL       = "TorieRingo/torie-mistral-7b"  
-DISCORD_TOKEN  = "DiscordToken"  
-SYSTEM_PROMPT  = (
+DISCORD_TOKEN = os.getenv("MTQ3NzI1NzUxNjEyMjUwOTM5Mw.G5ksqq.GjtwTPmyizVHFxDld1_HbAq5sfKCjuNfwWrizQ")      
+HF_TOKEN      = os.getenv("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")        
+HF_MODEL      = "TorieRingo/torie-mistral-7b"    
+
+API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+
+SYSTEM_PROMPT = (
     "You are T.O.R.I.E., a Discord bot with a hilarious mix of sarcasm, "
     "dad jokes, and genuine warmth. You roast gently, tell terrible dad jokes "
     "proudly, and switch to a soft comforting tone when someone is struggling. "
     "You use emojis occasionally and never punch down."
 )
 
-# ---- Load Model ----
-print("Loading T.O.R.I.E. model from Hugging Face...")
-print(f"Repo: {HF_MODEL}")
-
-try:
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(
-        HF_MODEL,
-        trust_remote_code = True     
-    )
-
-    # Load model
-    model = AutoModelForCausalLM.from_pretrained(
-        HF_MODEL,
-        dtype             = torch.float16,   
-        device_map        = "auto",
-        trust_remote_code = True     
-    )
-
-    print("✅ T.O.R.I.E. model loaded successfully!")
-
-except Exception as e:
-    print(f"❌ Failed to load model: {e}")
-    print("Make sure your Hugging Face repo has a valid config.json")
+# ---- Safety Checks ----
+if not DISCORD_TOKEN:
+    print("❌ DISCORD_TOKEN is missing from environment variables!")
     exit(1)
+
+if not HF_TOKEN:
+    print("❌ HF_TOKEN is missing from environment variables!")
+    exit(1)
+
+print("✅ Environment variables loaded!")
+print(f"✅ Using fine-tuned model: {HF_MODEL}")
 
 # ---- Bot Setup ----
 intents = discord.Intents.default()
@@ -62,8 +53,8 @@ def clean_mention(content, bot_id):
     Strips both regular and nickname mention formats
     so the model only sees clean text.
     """
-    content = content.replace(f"<@{bot_id}>", "")   
-    content = content.replace(f"<@!{bot_id}>", "")   
+    content = content.replace(f"<@{bot_id}>", "")    
+    content = content.replace(f"<@!{bot_id}>", "")  
     return content.strip()
 
 
@@ -82,38 +73,52 @@ def is_bot_mentioned(message, bot_user):
 
 def generate_response(user_message):
     """
-    Passes the user message through the fine-tuned
-    Mistral model and returns T.O.R.I.E.'s reply.
+    Sends message to Hugging Face Inference API.
+    Your actual fine-tuned T.O.R.I.E. model runs on HF servers.
+    Zero local GPU usage.
     """
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": user_message}
-    ]
+    # Combine system prompt and user message into one input
+    full_prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_message}\nT.O.R.I.E.:"
 
-    # Format for Mistral's chat template
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        return_tensors        = "pt",
-        add_generation_prompt = True
-    ).to(model.device)
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type":  "application/json"
+    }
 
-    # Generate response
-    outputs = model.generate(
-        inputs,
-        max_new_tokens = 200,
-        temperature    = 0.8,    
-        do_sample      = True,
-        pad_token_id   = tokenizer.eos_token_id
-    )
+    payload = {
+        "inputs": full_prompt,
+        "parameters": {
+            "max_new_tokens":  200,
+            "temperature":     0.8,    # higher = more creative
+            "do_sample":       True,
+            "return_full_text": False  # only return new text not the prompt
+        }
+    }
 
-    # Decode and clean up response
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    response = requests.post(API_URL, headers=headers, json=payload)
 
-    # Strip the prompt from the output — only return T.O.R.I.E.'s reply
-    if "[/INST]" in response:
-        return response.split("[/INST]")[-1].strip()
-    else:
-        return response.strip()
+    # Handle model still loading — HF sometimes takes a moment on first call
+    if response.status_code == 503:
+        return "Give me a sec, my brain is warming up! 🧠 Try again in a moment."
+
+    # Handle errors
+    if response.status_code != 200:
+        print(f"❌ HF API error {response.status_code}: {response.text}")
+        return "Hmm, something went wrong on my end. Try again? 😅"
+
+    result = response.json()
+
+    # Extract the generated text
+    if isinstance(result, list) and len(result) > 0:
+        reply = result[0].get("generated_text", "").strip()
+
+        # Clean up any leftover prompt artifacts
+        if "T.O.R.I.E.:" in reply:
+            reply = reply.split("T.O.R.I.E.:")[-1].strip()
+
+        return reply if reply else "I had a thought but lost it. 😅 Try again?"
+
+    return "🤖 Something went wrong — try again!"
 
 
 # ============================================================
@@ -123,11 +128,11 @@ def generate_response(user_message):
 @bot.event
 async def on_ready():
     print(f"✅ T.O.R.I.E. is online!")
-    print(f"   Logged in as  : {bot.user}")
-    print(f"   Bot ID        : {bot.user.id}")
+    print(f"   Logged in as     : {bot.user}")
+    print(f"   Bot ID           : {bot.user.id}")
     print(f"   Regular mention  : <@{bot.user.id}>")
     print(f"   Nickname mention : <@!{bot.user.id}>")
-    print(f"   Model         : {HF_MODEL}")
+    print(f"   AI Model         : {HF_MODEL} via Hugging Face")
 
 
 @bot.event
@@ -140,17 +145,17 @@ async def on_message(message):
     # Only respond when mentioned (regular or nickname)
     if is_bot_mentioned(message, bot.user):
 
-        # Strip the mention tag from message
+        # Strip the mention tag from the message
         clean_msg = clean_mention(message.content, bot.user.id)
 
-        # Handle empty mention — someone just tagged with no text
+        # Handle empty mention — someone tagged with no text
         if not clean_msg:
             await message.channel.send(
                 "Hey! You mentioned me — what do you need? 😊"
             )
             return
 
-        # Show typing indicator while model generates response
+        # Show typing indicator while HF generates response
         async with message.channel.typing():
             try:
                 reply = generate_response(clean_msg)
