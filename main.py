@@ -10,9 +10,9 @@ import os
 # ============================================================
 
 # ---- Config ----
-DISCORD_TOKEN = os.getenv("MTQ3NzI1NzUxNjEyMjUwOTM5Mw.G5ksqq.GjtwTPmyizVHFxDld1_HbAq5sfKCjuNfwWrizQ")      
-HF_TOKEN      = os.getenv("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")        
-HF_MODEL      = "TorieRingo/torie-mistral-7b"    
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")       # from Railway variables
+HF_TOKEN      = os.getenv("HF_TOKEN")            # from Railway variables
+HF_MODEL      = "TorieRingo/torie-mistral-7b"    # your fine-tuned model
 
 API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
 
@@ -53,8 +53,8 @@ def clean_mention(content, bot_id):
     Strips both regular and nickname mention formats
     so the model only sees clean text.
     """
-    content = content.replace(f"<@{bot_id}>", "")    
-    content = content.replace(f"<@!{bot_id}>", "")  
+    content = content.replace(f"<@{bot_id}>", "")    # regular mention
+    content = content.replace(f"<@!{bot_id}>", "")   # nickname mention
     return content.strip()
 
 
