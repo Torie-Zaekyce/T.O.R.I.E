@@ -14,7 +14,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")       # from Railway variables
 HF_TOKEN      = os.getenv("HF_TOKEN")            # from Railway variables
 HF_MODEL      = "TorieRingo/torie-mistral-7b"    # your fine-tuned model
 
-API_URL = f"https://router.huggingface.co/models/{HF_MODEL}"
+API_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}/v1/chat/completions"
 
 SYSTEM_PROMPT = (
     "You are T.O.R.I.E., a Discord bot with a hilarious mix of sarcasm, "
@@ -73,26 +73,25 @@ def is_bot_mentioned(message, bot_user):
 
 def generate_response(user_message):
     """
-    Sends message to Hugging Face Inference API.
-    Your actual fine-tuned T.O.R.I.E. model runs on HF servers.
+    Sends message to Hugging Face Router API (new endpoint).
+    Uses chat completions format — same as OpenAI style.
+    Your fine-tuned T.O.R.I.E. model runs on HF servers.
     Zero local GPU usage.
     """
-    # Combine system prompt and user message into one input
-    full_prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_message}\nT.O.R.I.E.:"
-
     headers = {
         "Authorization": f"Bearer {HF_TOKEN}",
         "Content-Type":  "application/json"
     }
 
+    # New router uses OpenAI-style chat completions format
     payload = {
-        "inputs": full_prompt,
-        "parameters": {
-            "max_new_tokens":  200,
-            "temperature":     0.8,    # higher = more creative
-            "do_sample":       True,
-            "return_full_text": False  # only return new text not the prompt
-        }
+        "model": HF_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": user_message}
+        ],
+        "max_tokens":  200,
+        "temperature": 0.8     # higher = more creative
     }
 
     response = requests.post(API_URL, headers=headers, json=payload)
@@ -108,17 +107,13 @@ def generate_response(user_message):
 
     result = response.json()
 
-    # Extract the generated text
-    if isinstance(result, list) and len(result) > 0:
-        reply = result[0].get("generated_text", "").strip()
-
-        # Clean up any leftover prompt artifacts
-        if "T.O.R.I.E.:" in reply:
-            reply = reply.split("T.O.R.I.E.:")[-1].strip()
-
+    # Extract reply from chat completions response format
+    try:
+        reply = result["choices"][0]["message"]["content"].strip()
         return reply if reply else "I had a thought but lost it. 😅 Try again?"
-
-    return "🤖 Something went wrong — try again!"
+    except (KeyError, IndexError) as e:
+        print(f"❌ Unexpected response format: {result}")
+        return "🤖 Something went wrong — try again!"
 
 
 # ============================================================
