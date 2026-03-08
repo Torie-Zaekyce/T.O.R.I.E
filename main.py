@@ -85,8 +85,8 @@ def clean_mention(content, bot_id):
     Strips both regular and nickname mention formats
     so the model only sees clean text.
     """
-    content = content.replace(f"<@{bot_id}>", "")    
-    content = content.replace(f"<@!{bot_id}>", "")   
+    content = content.replace(f"<@{bot_id}>", "")    # regular mention
+    content = content.replace(f"<@!{bot_id}>", "")   # nickname mention
     return content.strip()
 
 
@@ -115,8 +115,8 @@ def generate_response(user_message):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message}
         ],
-        max_tokens  = 80,    
-        temperature = 0.8    
+        max_tokens  = 80,     # hard cap — keeps replies short and snappy
+        temperature = 0.8    # higher = more creative responses
     )
     return response.choices[0].message.content
 
@@ -148,14 +148,52 @@ async def on_message(message):
         # Strip the mention tag from the message
         clean_msg = clean_mention(message.content, bot.user.id)
 
-        # Handle empty mention — someone tagged with no text
+        # ---- Handle Stickers ----
+        if message.stickers:
+            sticker_name = message.stickers[0].name
+            async with message.channel.typing():
+                try:
+                    # Tell the model a sticker was sent so she reacts to it
+                    sticker_prompt = (
+                        f"Someone sent you a Discord sticker "
+                        f"called '{sticker_name}'. React to it in character."
+                    )
+                    reply = generate_response(sticker_prompt)
+                except Exception as e:
+                    print(f"❌ Sticker error: {e}")
+                    reply = "Oh a sticker! Bold choice. 👀"
+            await message.channel.send(reply)
+            return
+
+        # ---- Handle Images/Attachments ----
+        if message.attachments:
+            attachment = message.attachments[0]
+            is_image = any(
+                attachment.filename.lower().endswith(ext)
+                for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]
+            )
+            if is_image:
+                async with message.channel.typing():
+                    try:
+                        image_prompt = (
+                            "Someone sent you an image but you can't see it. "
+                            "React with curiosity and mild sarcasm, ask what it is."
+                        )
+                        reply = generate_response(image_prompt)
+                    except Exception as e:
+                        print(f"❌ Image error: {e}")
+                        reply = "An image? My eyes don't work like that yet. 👀 What is it?"
+                await message.channel.send(reply)
+                return
+
+        # ---- Handle Empty Mention (no text, no sticker, no image) ----
         if not clean_msg:
             await message.channel.send(
                 "Hey! You mentioned me — what do you need? 😊"
             )
             return
 
-        # Show typing indicator while HF generates response
+        # ---- Handle Normal Text Message ----
         async with message.channel.typing():
             try:
                 reply = generate_response(clean_msg)
