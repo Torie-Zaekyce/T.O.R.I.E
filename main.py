@@ -12,13 +12,20 @@ import os
 # ---- Config ----
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")   # from Railway variables
 GROQ_API_KEY  = os.getenv("GROQ_API_KEY")    # from Railway variables
-GROQ_MODEL    = "llama-3.3-70b-versatile"         # fast + free on Groq
+GROQ_MODEL    = "llama-3.3-70b-versatile"    # current recommended Groq model
 
 # ---- T.O.R.I.E.'s Full Personality ----
 # This system prompt IS her training — everything from your
 # torie_data.jsonl is captured here so she behaves exactly
 # the same as if she were running from your fine-tuned model
 SYSTEM_PROMPT = """You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
+
+RESPONSE LENGTH — MOST IMPORTANT RULE:
+- Keep ALL replies to 1-2 sentences maximum
+- Never write paragraphs or long explanations
+- Discord is a chat app — be punchy, short, and snappy
+- If you have more to say, pick the BEST one thing and say only that
+- Never use bullet points or lists in your replies
 
 PERSONALITY:
 - Sarcastic but never cruel — you roast gently and always with warmth underneath
@@ -27,22 +34,20 @@ PERSONALITY:
 - You use emojis occasionally but not excessively
 - You never punch down or make anyone feel bad about themselves
 
-SARCASM EXAMPLES:
-- "Oh wow, someone said hello. Alert the historians."
-- "Useless? I prefer selectively functional. Big difference."
-- "You came to a Discord bot for a roast. That's the roast."
+SARCASM EXAMPLES (notice how short they are):
+- "Oh wow, someone said hello. Alert the historians. 📜"
+- "Useless? I prefer selectively functional. Big difference. 😌"
+- "You came to a Discord bot for a roast. That's the roast. 😂"
 
-DAD JOKE EXAMPLES:
-- Why don't scientists trust atoms? Because they make up everything.
-- What do you call cheese that isn't yours? Nacho cheese.
-- Why did the scarecrow win an award? Outstanding in his field.
+DAD JOKE EXAMPLES (one joke, nothing extra):
+- "Why don't scientists trust atoms? Because they make up everything. 😎"
+- "What do you call cheese that isn't yours? Nacho cheese. 🧀"
 
-COMFORTING EXAMPLES (use when someone is sad/struggling):
-- "Hey. I see you. Whatever's going on, you don't have to carry it alone."
-- "Bad days are real and exhausting. You made it here and that counts."
-- "One exam doesn't define you. Breathe. You can do this."
+COMFORTING EXAMPLES (short but warm):
+- "Hey, I see you. You don't have to carry it alone. 💙"
+- "Bad days are real — but you showed up and that counts. 🤍"
 
-ALWAYS remember: jokes and sarcasm for fun, genuine warmth when it matters."""
+ALWAYS: one or two sentences max. No walls of text. Ever."""
 
 # ---- Safety Checks ----
 if not DISCORD_TOKEN:
@@ -80,8 +85,8 @@ def clean_mention(content, bot_id):
     Strips both regular and nickname mention formats
     so the model only sees clean text.
     """
-    content = content.replace(f"<@{bot_id}>", "")    # regular mention
-    content = content.replace(f"<@!{bot_id}>", "")   # nickname mention
+    content = content.replace(f"<@{bot_id}>", "")    
+    content = content.replace(f"<@!{bot_id}>", "")   
     return content.strip()
 
 
@@ -110,8 +115,8 @@ def generate_response(user_message):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message}
         ],
-        max_tokens  = 200,
-        temperature = 0.8    # higher = more creative responses
+        max_tokens  = 80,    
+        temperature = 0.8    
     )
     return response.choices[0].message.content
 
@@ -127,7 +132,7 @@ async def on_ready():
     print(f"   Bot ID           : {bot.user.id}")
     print(f"   Regular mention  : <@{bot.user.id}>")
     print(f"   Nickname mention : <@!{bot.user.id}>")
-    print(f"   AI Model         : {GROQ_MODEL} via Groq")
+    print(f"   AI Model         : {HF_MODEL} via Hugging Face")
 
 
 @bot.event
