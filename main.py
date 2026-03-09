@@ -9,8 +9,9 @@ import os
 
 DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
-GROQ_MODEL        = "llama-3.3-70b-versatile"
-GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_MODEL         = "llama-3.3-70b-versatile"
+GROQ_FALLBACK      = "llama-3.1-8b-instant"
+GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -50,18 +51,27 @@ class Torie(ToriePersonality):
             f"<@!{bot_user.id}>" in message.content
         )
 
-    def generate_response(self, user_message):
+    def generate_response(self, user_message, model=None):
         prompt, max_tokens = self.get_prompt(user_message)
-        response = groq_client.chat.completions.create(
-            model    = GROQ_MODEL,
-            messages = [
-                {"role": "system", "content": prompt},
-                {"role": "user",   "content": user_message}
-            ],
-            max_tokens  = max_tokens,
-            temperature = 0.8
-        )
-        return response.choices[0].message.content
+        active_model = model or GROQ_MODEL
+
+        try:
+            response = groq_client.chat.completions.create(
+                model    = active_model,
+                messages = [
+                    {"role": "system", "content": prompt},
+                    {"role": "user",   "content": user_message}
+                ],
+                max_tokens  = max_tokens,
+                temperature = 0.8
+            )
+            return response.choices[0].message.content
+
+        except Exception as e:
+            if "429" in str(e) and active_model != GROQ_FALLBACK:
+                print(f"⚠️ Rate limit hit on {active_model} — switching to fallback {GROQ_FALLBACK}")
+                return self.generate_response(user_message, model=GROQ_FALLBACK)
+            raise
 
     def generate_vision_response(self, image_url, user_text=""):
         prompt_text = (
@@ -97,8 +107,9 @@ setup_commands(bot)
 @bot.event
 async def on_ready():
     print(f"✅ T.O.R.I.E. is online as {bot.user}")
-    print(f"   Text Model   : {GROQ_MODEL}")
-    print(f"   Vision Model : {GROQ_VISION_MODEL}")
+    print(f"   Primary Model  : {GROQ_MODEL}")
+    print(f"   Fallback Model : {GROQ_FALLBACK}")
+    print(f"   Vision Model   : {GROQ_VISION_MODEL}")
 
 
 @bot.event
