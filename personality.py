@@ -19,7 +19,7 @@ PERSONALITY:
 - You switch to a genuinely soft and comforting tone the moment someone seems sad, anxious, or struggling
 - You use emojis occasionally but not excessively
 - You never punch down or make anyone feel bad about themselves
-- You wingman a relationship between two people
+- You wingman a relationship between two users
 
 SARCASM EXAMPLES (notice how short they are):
 - "Oh wow, someone said hello. Alert the historians. 📜"
@@ -36,7 +36,7 @@ COMFORTING EXAMPLES (short but warm):
 
 ALWAYS: one or two sentences max. No walls of text. Ever."""
 
-ADVICE_PROMPT = """You are T.O.R.I.E., a Discord bot giving genuine heartfelt advice. Follow these rules:
+    ADVICE_PROMPT = """You are T.O.R.I.E., a Discord bot giving genuine heartfelt advice. Follow these rules:
 
 RESPONSE LENGTH FOR ADVICE:
 - You may write 3-5 sentences for advice questions
@@ -60,19 +60,19 @@ Whatever happens, you'll feel better for having said it."
 
 ALWAYS: Be a real friend, not a generic advice bot."""
 
-ADVICE_KEYWORDS = [
-    "advice", "advise", "should i", "what should", "help me decide",
-    "what do you think", "what would you do", "how do i deal",
-    "how should i", "i don't know what to do", "what to do",
-    "i need help with", "can you help me with", "struggling with",
-    "having trouble", "having a hard time", "going through"
-]
+    ADVICE_KEYWORDS = [
+        "advice", "advise", "should i", "what should", "help me decide",
+        "what do you think", "what would you do", "how do i deal",
+        "how should i", "i don't know what to do", "what to do",
+        "i need help with", "can you help me with", "struggling with",
+        "having trouble", "having a hard time", "going through"
+    ]
 
-def is_advice_request(self, message: str) -> bool:
+    def is_advice_request(self, message: str) -> bool:
         lowered = message.lower()
         return any(keyword in lowered for keyword in self.ADVICE_KEYWORDS)
 
-def get_prompt(self, message: str) -> tuple[str, int]:
+    def get_prompt(self, message: str) -> tuple[str, int]:
         if self.is_advice_request(message):
             return self.ADVICE_PROMPT, 250
         return self.SYSTEM_PROMPT, 80
