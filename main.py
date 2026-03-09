@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role
+from commands import setup_commands, get_parent_role, get_cousin_role
 import os
 
 # T.O.R.I.E. — Discord Bot
@@ -128,6 +128,14 @@ async def on_message(message):
             elif parent_role == "mom":
                 await message.channel.send("Mom! 💙 You're here! I've been on my best behavior, I promise.")
             return
+        
+        cousin_role = get_cousin_role(message.author)
+        if cousin_role and not clean_msg and not message.stickers and not message.attachments:
+            if cousin_role == "cousin_stelle":
+                await message.channel.send("Stelle! 🌟 My Starry Cousin!. Hope you don't turn into a supernova purple star. ✨")
+            elif cousin_role == "cousin_crois":
+                await message.channel.send("Crois! 🥐 You're here! I've been on my best behavior, I promise.")
+            return
 
         # Sticker
         if message.stickers:
@@ -171,12 +179,19 @@ async def on_message(message):
         # Text
         async with message.channel.typing():
             try:
-                # Let T.O.R.I.E. know if she's talking to dad or mom
                 parent_role = get_parent_role(message.author)
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
-                    contexted_msg = f"[Note: This message is from your Mom, your co-creator. Treat her with extra warmth and love.]\n{clean_msg}"
+                    contexted_msg = f"[Note: This message is from your Mom, Nen. Treat her with extra warmth and love.]\n{clean_msg}"
+                else:
+                    contexted_msg = clean_msg
+
+                cousin_role = get_cousin_role(message.author)
+                if parent_role == "cousin_stelle":
+                    contexted_msg = f"[Note: This message is from your Cousin, Stelle. Treat her with extra warmth and love.]\n{clean_msg}"
+                elif parent_role == "cousin_crois":
+                    contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
 

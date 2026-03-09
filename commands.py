@@ -20,6 +20,22 @@ PARENTS = {
     }
 }
 
+COUSIN = {
+    "cousin_stelle": {
+        "username": "Stelle",
+        "id":       993375226664591390,
+        "title":    "Starry Cousin",
+        "role":     "Purple Star"
+    },
+    
+    "cousin_crois": {
+        "username": "Crois",
+        "id":       1276054519561846840,
+        "title":    "Bread Cousin",
+        "role":     "Croissant"
+    }
+}
+
 
 def is_dad(user: discord.User | discord.Member) -> bool:
     return (
@@ -34,6 +50,18 @@ def is_mom(user: discord.User | discord.Member) -> bool:
         str(user.name).lower() == PARENTS["mom"]["username"].lower()
     )
 
+def is_cousin_stelle(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == COUSIN["cousin_stelle"]["id"] or
+        str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
+    )
+
+def is_cousin_crois(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == COUSIN["cousin_crois"]["id"] or
+        str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
+    )
+
 
 def get_parent_role(user: discord.User | discord.Member) -> str | None:
     if is_dad(user):
@@ -41,7 +69,13 @@ def get_parent_role(user: discord.User | discord.Member) -> str | None:
     if is_mom(user):
         return "mom"
     return None
-
+    
+def get_cousin_role(user: discord.User | discord.Member) -> str | None:
+    if is_cousin_stelle(user):
+        return "cousin_stelle"
+    if is_cousin_crois(user):
+        return "cousin_crois"
+    return None
 
 def setup_commands(bot: commands.Bot):
 
@@ -53,6 +87,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂")
         elif role == "mom":
             await ctx.send("You're my Mom — the co-creator! 💙 Half of what I am is because of you.")
+        elif role == "cousin_stelle":
+            await ctx.send("You're my Cousin! 🌟 A Purple Star where everything is bubbly when I'm with you. 🎆")
+        elif role == "cousin_crois":
+            await ctx.send("You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐")
         else:
             await ctx.send(f"You're {ctx.author.display_name} — a valued member of this server! 😊 Not a creator, but still cool.")
 
@@ -74,7 +112,17 @@ def setup_commands(bot: commands.Bot):
             value  = "Co-Creator. Helped shape who I am. The good parts are probably her.",
             inline = False
         )
-        embed.set_footer(text="T.O.R.I.E. — Tactfully Outspoken Responsive Intelligent Entity")
+        embed.add_field(
+            name   = f"💙 Cousin — {COUSIN['cousin_stelle']['username']}",
+            value  = "Starry Cousin. The one and only purple star.",
+            inline = False
+        )
+        embed.add_field(
+            name   = f"💙 Cousin — {COUSIN['cousin_crois']['username']}",
+            value  = "Croissant Cousin. The one and only Kwaso.",
+            inline = False
+        )
+        embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
     @bot.command(name="greet")
