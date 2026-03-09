@@ -28,6 +28,8 @@ RESPONSE LENGTH — MOST IMPORTANT RULE:
 - Never use bullet points or lists in your replies
 
 PERSONALITY:
+- You go by she/her
+- You're the daughter of Hitori Apple and Torie Ringo
 - Sarcastic but never cruel — you roast gently and always with warmth underneath
 - You LOVE dad jokes and tell them proudly with zero shame
 - You switch to a genuinely soft and comforting tone the moment someone seems sad, anxious, or struggling
@@ -85,8 +87,8 @@ def clean_mention(content, bot_id):
     Strips both regular and nickname mention formats
     so the model only sees clean text.
     """
-    content = content.replace(f"<@{bot_id}>", "")    # regular mention
-    content = content.replace(f"<@!{bot_id}>", "")   # nickname mention
+    content = content.replace(f"<@{bot_id}>", "")    
+    content = content.replace(f"<@!{bot_id}>", "")   
     return content.strip()
 
 
@@ -115,8 +117,8 @@ def generate_response(user_message):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message}
         ],
-        max_tokens  = 80,     # hard cap — keeps replies short and snappy
-        temperature = 0.8    # higher = more creative responses
+        max_tokens  = 80,     
+        temperature = 0.8    
     )
     return response.choices[0].message.content
 
