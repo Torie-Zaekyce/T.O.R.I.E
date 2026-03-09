@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role
+from commands import setup_commands, get_parent_role, get_cousin_role, contains_filtered_word
 from datetime import datetime
 import pytz
 import random
@@ -143,6 +143,17 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
+        return
+
+    if contains_filtered_word(message.content):
+        try:
+            await message.delete()
+            warning = await message.channel.send(
+                f"⚠️ Hey {message.author.mention}, watch the language please! 😤"
+            )
+            await warning.delete(delay=5)
+        except discord.Forbidden:
+            print(f"⚠️ Missing permissions to delete message in #{message.channel.name}")
         return
 
     if torie.is_bot_mentioned(message, bot.user):
