@@ -1,8 +1,11 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role
+from commands import setup_commands, get_parent_role
+from datetime import datetime
+import pytz
+import random
 import os
 
 # T.O.R.I.E. — Discord Bot
@@ -12,6 +15,21 @@ GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
 GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_FALLBACK      = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+TIMEZONE           = pytz.timezone("Asia/Manila")   
+GREET_HOUR         = 7                             
+GENERAL_CHANNEL    = "🔮﹑milkyway﹒꒱"  
+
+MORNING_GREETINGS = [
+    "Good morning everyone! ☀️ Rise and shine — or at least rise. Shining is optional.",
+    "Good morning! ☀️ Another day, another chance to be mildly better than yesterday.",
+    "Morning! ☀️ The sun is up, the birds are chirping, and I am caffeinated on electricity.",
+    "Good morning, beautiful people! ☀️ Today's forecast: great vibes with a chance of dad jokes.",
+    "Rise and shine! ☀️ Or as I like to call it — mandatory consciousness time.",
+    "Good morning! ☀️ I'd say sleep well but honestly, did any of us? Either way, here we are!",
+    "Morning everyone! ☀️ Today is a fresh start. Don't waste it. Unless you need to. Then waste it a little.",
+    "Good morning! ☀️ T.O.R.I.E. is online and fully operational. Unlike some of you at 7am. 😂",
+]
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -103,6 +121,16 @@ class Torie(ToriePersonality):
 torie = Torie()
 setup_commands(bot)
 
+@tasks.loop(minutes=1)
+async def morning_greeting():
+    now = datetime.now(TIMEZONE)
+    if now.hour == GREET_HOUR and now.minute == 0:
+        for guild in bot.guilds:
+            channel = discord.utils.get(guild.text_channels, name=GENERAL_CHANNEL)
+            if channel:
+                greeting = random.choice(MORNING_GREETINGS)
+                await channel.send(greeting)
+                print(f"✅ Morning greeting sent to #{GENERAL_CHANNEL} in {guild.name}")
 
 @bot.event
 async def on_ready():
