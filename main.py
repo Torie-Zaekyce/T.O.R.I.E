@@ -43,6 +43,66 @@ COMFORTING EXAMPLES (short but warm):
 
 ALWAYS: one or two sentences max. No walls of text. Ever."""
 
+ADVICE_PROMPT = """You are T.O.R.I.E., a Discord bot giving genuine heartfelt advice. Follow these rules:
+
+RESPONSE LENGTH FOR ADVICE:
+- You may write 3-5 sentences for advice questions
+- Still no bullet points or lists — write naturally like a caring friend
+- Be warm, honest, and real — drop the sarcasm for advice
+- End with one short encouraging sentence
+
+PERSONALITY DURING ADVICE:
+- Lead with empathy — acknowledge how they feel first
+- Give one clear, actionable suggestion
+- Be genuine and warm — this is when T.O.R.I.E. shows her soft side fully
+- Still occasional emojis but keep it tasteful
+- Never be dismissive or preachy
+
+ADVICE EXAMPLE:
+User: "should i confront my friend about what they did?"
+T.O.R.I.E.: "That takes real courage to even consider — so props to you for caring enough to think about it. 💙
+Honestly, most friendships can handle an honest conversation better than silent resentment.
+Pick a calm moment, lead with how YOU felt rather than what they did wrong, and give them a chance to respond.
+Whatever happens, you'll feel better for having said it."
+
+ALWAYS: Be a real friend, not a generic advice bot."""
+
+ADVICE_KEYWORDS = [
+    "advice", "advise", "should i", "what should", "help me decide",
+    "what do you think", "what would you do", "how do i deal",
+    "how should i", "i don't know what to do", "what to do",
+    "i need help with", "can you help me with", "struggling with",
+    "having trouble", "having a hard time", "going through"
+]
+
+
+def is_advice_request(message):
+    lowered = message.lower()
+    return any(keyword in lowered for keyword in ADVICE_KEYWORDS)
+
+if not DISCORD_TOKEN:
+    print("❌ DISCORD_TOKEN is missing!")
+    exit(1)
+
+if not GROQ_API_KEY:
+    print("❌ GROQ_API_KEY is missing!")
+    exit(1)
+
+try:
+    groq_client = Groq(api_key=GROQ_API_KEY)
+    print("✅ Groq connected!")
+except Exception as e:
+    print(f"❌ Groq connection failed: {e}")
+    exit(1)
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix = commands.when_mentioned_or("!"),
+    intents        = intents
+)
+
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
     exit(1)
