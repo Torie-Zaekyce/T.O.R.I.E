@@ -107,6 +107,7 @@ async def on_message(message):
     if torie.is_bot_mentioned(message, bot.user):
         clean_msg = torie.clean_mention(message.content, bot.user.id)
 
+        # Sticker
         if message.stickers:
             sticker_name = message.stickers[0].name
             async with message.channel.typing():
@@ -120,6 +121,7 @@ async def on_message(message):
             await message.channel.send(reply)
             return
 
+        # Image
         if message.attachments:
             attachment = message.attachments[0]
             is_image = any(
@@ -139,10 +141,12 @@ async def on_message(message):
                 await message.channel.send(reply)
                 return
 
+        # Empty mention
         if not clean_msg:
             await message.channel.send("Hey! You mentioned me — what do you need? 😊")
             return
 
+        # Text
         async with message.channel.typing():
             try:
                 reply = torie.generate_response(clean_msg)
