@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role
+from commands import setup_commands, get_parent_role, get_cousin_role
 from datetime import datetime
 import pytz
 import random
