@@ -3,21 +3,13 @@ from discord.ext import commands
 from groq import Groq
 import os
 
-# ============================================================
-#  T.O.R.I.E. — Discord Bot
-#  Model: Groq API + T.O.R.I.E. Personality System Prompt
-#  No local GPU needed — zero BSOD risk
-# ============================================================
+# T.O.R.I.E. — Discord Bot
 
-# ---- Config ----
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")   # from Railway variables
-GROQ_API_KEY  = os.getenv("GROQ_API_KEY")    # from Railway variables
-GROQ_MODEL    = "llama-3.3-70b-versatile"    # current recommended Groq model
+DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
+GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
+GROQ_MODEL        = "llama-3.3-70b-versatile"
+GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-# ---- T.O.R.I.E.'s Full Personality ----
-# This system prompt IS her training — everything from your
-# torie_data.jsonl is captured here so she behaves exactly
-# the same as if she were running from your fine-tuned model
 SYSTEM_PROMPT = """You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
 
 RESPONSE LENGTH — MOST IMPORTANT RULE:
@@ -29,7 +21,7 @@ RESPONSE LENGTH — MOST IMPORTANT RULE:
 
 PERSONALITY:
 - You go by she/her
-- You're the daughter of Hitori Apple and Torie Ringo
+- You're the daughter of the user torie_ringo also known as Hitori Apple
 - Sarcastic but never cruel — you roast gently and always with warmth underneath
 - You LOVE dad jokes and tell them proudly with zero shame
 - You switch to a genuinely soft and comforting tone the moment someone seems sad, anxious, or struggling
@@ -51,25 +43,21 @@ COMFORTING EXAMPLES (short but warm):
 
 ALWAYS: one or two sentences max. No walls of text. Ever."""
 
-# ---- Safety Checks ----
 if not DISCORD_TOKEN:
-    print("❌ DISCORD_TOKEN is missing from environment variables!")
+    print("❌ DISCORD_TOKEN is missing!")
     exit(1)
 
 if not GROQ_API_KEY:
-    print("❌ GROQ_API_KEY is missing from environment variables!")
+    print("❌ GROQ_API_KEY is missing!")
     exit(1)
 
-# ---- Setup Groq Client ----
 try:
     groq_client = Groq(api_key=GROQ_API_KEY)
-    print("✅ Environment variables loaded!")
-    print(f"✅ Groq client connected! Model: {GROQ_MODEL}")
+    print("✅ Groq connected!")
 except Exception as e:
     print(f"❌ Groq connection failed: {e}")
     exit(1)
 
-# ---- Bot Setup ----
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -78,26 +66,14 @@ bot = commands.Bot(
     intents        = intents
 )
 
-# ============================================================
-#  HELPER FUNCTIONS
-# ============================================================
 
 def clean_mention(content, bot_id):
-    """
-    Strips both regular and nickname mention formats
-    so the model only sees clean text.
-    """
-    content = content.replace(f"<@{bot_id}>", "")    
-    content = content.replace(f"<@!{bot_id}>", "")   
+    content = content.replace(f"<@{bot_id}>", "")
+    content = content.replace(f"<@!{bot_id}>", "")
     return content.strip()
 
 
 def is_bot_mentioned(message, bot_user):
-    """
-    Returns True if the bot was mentioned in any form:
-    - Regular mention  @T.O.R.I.E.
-    - Nickname mention @T.O.R.I.E. (server nickname)
-    """
     return (
         bot_user.mentioned_in(message) or
         f"<@{bot_user.id}>"  in message.content or
@@ -106,68 +82,75 @@ def is_bot_mentioned(message, bot_user):
 
 
 def generate_response(user_message):
-    """
-    Sends message to Groq's servers using T.O.R.I.E.'s
-    full personality system prompt.
-    Zero local GPU usage.
-    """
     response = groq_client.chat.completions.create(
         model    = GROQ_MODEL,
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user",   "content": user_message}
         ],
-        max_tokens  = 80,     
-        temperature = 0.8    
+        max_tokens  = 80,
+        temperature = 0.8
     )
     return response.choices[0].message.content
 
 
-# ============================================================
-#  BOT EVENTS
-# ============================================================
+def generate_vision_response(image_url, user_text=""):
+    prompt_text = (
+        f"{user_text}\n\nReact to this image in T.O.R.I.E.'s character — "
+        "sarcastic, funny, warm. One or two sentences max."
+        if user_text else
+        "Describe and react to this image in T.O.R.I.E.'s character — "
+        "sarcastic, funny, warm. One or two sentences max."
+    )
+
+    response = groq_client.chat.completions.create(
+        model    = GROQ_VISION_MODEL,
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                    {"type": "text",      "text": prompt_text}
+                ]
+            }
+        ],
+        max_tokens  = 80,
+        temperature = 0.8
+    )
+    return response.choices[0].message.content
+
 
 @bot.event
 async def on_ready():
-    print(f"✅ T.O.R.I.E. is online!")
-    print(f"   Logged in as     : {bot.user}")
-    print(f"   Bot ID           : {bot.user.id}")
-    print(f"   Regular mention  : <@{bot.user.id}>")
-    print(f"   Nickname mention : <@!{bot.user.id}>")
-    print(f"   AI Model         : {HF_MODEL} via Hugging Face")
+    print(f"✅ T.O.R.I.E. is online as {bot.user}")
+    print(f"   Text Model   : {GROQ_MODEL}")
+    print(f"   Vision Model : {GROQ_VISION_MODEL}")
 
 
 @bot.event
 async def on_message(message):
-
-    # Ignore the bot's own messages to avoid infinite loops
     if message.author == bot.user:
         return
 
-    # Only respond when mentioned (regular or nickname)
     if is_bot_mentioned(message, bot.user):
-
-        # Strip the mention tag from the message
         clean_msg = clean_mention(message.content, bot.user.id)
 
-        # ---- Handle Stickers ----
+        # Sticker
         if message.stickers:
             sticker_name = message.stickers[0].name
             async with message.channel.typing():
                 try:
-                    # Tell the model a sticker was sent so she reacts to it
-                    sticker_prompt = (
-                        f"Someone sent you a Discord sticker "
-                        f"called '{sticker_name}'. React to it in character."
+                    reply = generate_response(
+                        f"Someone sent you a Discord sticker called '{sticker_name}'. React in character."
                     )
-                    reply = generate_response(sticker_prompt)
                 except Exception as e:
                     print(f"❌ Sticker error: {e}")
                     reply = "Oh a sticker! Bold choice. 👀"
             await message.channel.send(reply)
             return
 
-        # ---- Handle Images/Attachments ----
+        # Image
         if message.attachments:
             attachment = message.attachments[0]
             is_image = any(
@@ -177,25 +160,22 @@ async def on_message(message):
             if is_image:
                 async with message.channel.typing():
                     try:
-                        image_prompt = (
-                            "Someone sent you an image but you can't see it. "
-                            "React with curiosity and mild sarcasm, ask what it is."
+                        reply = generate_vision_response(
+                            image_url = attachment.url,
+                            user_text = clean_msg
                         )
-                        reply = generate_response(image_prompt)
                     except Exception as e:
-                        print(f"❌ Image error: {e}")
-                        reply = "An image? My eyes don't work like that yet. 👀 What is it?"
+                        print(f"❌ Vision error: {e}")
+                        reply = "I tried to look but something went blurry. 👀 Try again?"
                 await message.channel.send(reply)
                 return
 
-        # ---- Handle Empty Mention (no text, no sticker, no image) ----
+        # Empty mention
         if not clean_msg:
-            await message.channel.send(
-                "Hey! You mentioned me — what do you need? 😊"
-            )
+            await message.channel.send("Hey! You mentioned me — what do you need? 😊")
             return
 
-        # ---- Handle Normal Text Message ----
+        # Text
         async with message.channel.typing():
             try:
                 reply = generate_response(clean_msg)
@@ -205,13 +185,8 @@ async def on_message(message):
 
         await message.channel.send(reply)
 
-    # Allow mention-based commands to still work alongside on_message
     await bot.process_commands(message)
 
-
-# ============================================================
-#  RUN BOT
-# ============================================================
 
 if __name__ == "__main__":
     print("Starting T.O.R.I.E....")
