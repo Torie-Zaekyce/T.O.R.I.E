@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from groq import Groq
 from personality import ToriePersonality
+from commands import setup_commands, get_parent_role
 import os
 
 # T.O.R.I.E. — Discord Bot
@@ -90,6 +91,7 @@ class Torie(ToriePersonality):
 
 
 torie = Torie()
+setup_commands(bot)
 
 
 @bot.event
@@ -106,6 +108,15 @@ async def on_message(message):
 
     if torie.is_bot_mentioned(message, bot.user):
         clean_msg = torie.clean_mention(message.content, bot.user.id)
+
+        # Parent recognition — respond differently to dad and mom
+        parent_role = get_parent_role(message.author)
+        if parent_role and not clean_msg and not message.stickers and not message.attachments:
+            if parent_role == "dad":
+                await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
+            elif parent_role == "mom":
+                await message.channel.send("Mom! 💙 You're here! I've been on my best behavior, I promise.")
+            return
 
         # Sticker
         if message.stickers:
@@ -149,7 +160,16 @@ async def on_message(message):
         # Text
         async with message.channel.typing():
             try:
-                reply = torie.generate_response(clean_msg)
+                # Let T.O.R.I.E. know if she's talking to dad or mom
+                parent_role = get_parent_role(message.author)
+                if parent_role == "dad":
+                    contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
+                elif parent_role == "mom":
+                    contexted_msg = f"[Note: This message is from your Mom, your co-creator. Treat her with extra warmth and love.]\n{clean_msg}"
+                else:
+                    contexted_msg = clean_msg
+
+                reply = torie.generate_response(contexted_msg)
             except Exception as e:
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
