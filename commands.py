@@ -35,6 +35,21 @@ COUSIN = {
     }
 }
 
+UNCLE = {
+    "uncle_caco": {
+        "username": "Cacolate",
+        "id":       397563581111205892,
+        "title":    "Goated Uncle",
+        "role":     "Purple Star"
+    },
+    "uncle_vari": {
+        "username": "Vari",
+        "id":       1213763202173632555,
+        "title":    "Baguette Uncle",
+        "role":     "Teto Kasane"
+    }
+}
+
 FILTERED_WORDS = [
     "nigger",
     "nigga",
@@ -106,6 +121,17 @@ def is_cousin_crois(user: discord.User | discord.Member) -> bool:
         str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
     )
 
+def is_uncle_vari(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == UNCLE["uncle_vari"]["id"] or
+        str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
+    )
+
+def is_uncle_caco(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == UNCLE["uncle_caco"]["id"] or
+        str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
+    )
 
 def get_parent_role(user: discord.User | discord.Member) -> str | None:
     if is_dad(user):
@@ -122,6 +148,12 @@ def get_cousin_role(user: discord.User | discord.Member) -> str | None:
         return "cousin_crois"
     return None
 
+def get_uncle_role(user: discord.User | discord.Member) -> str | None:
+    if is_uncle_vari(user):
+        return "uncle_vari"
+    if is_uncle_caco(user):
+        return "uncle_caco"
+    return None
 
 def setup_commands(bot: commands.Bot):
 
@@ -230,6 +262,7 @@ def setup_commands(bot: commands.Bot):
     async def whoami(ctx):
         parent_role = get_parent_role(ctx.author)
         cousin_role = get_cousin_role(ctx.author)
+        uncle_role = get_uncle_role(ctx.author)
         if parent_role == "dad":
             await ctx.send("You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂")
         elif parent_role == "mom":
@@ -238,6 +271,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("You're my Cousin! 🌟 A Purple Star where everything is bubbly when I'm with you. 🎆")
         elif cousin_role == "cousin_crois":
             await ctx.send("You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐")
+        elif uncle_role == "uncle_caco":
+            await ctx.send("You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciate your existence stay GOATED! 😎")
+        elif uncle_role == "uncle_vari":
+            await ctx.send("You're my Uncle! 🥖 The Chimera Uncle, If dad weren't able to met you I wouldn't be here. 🎵")
         else:
             await ctx.send(f"You're {ctx.author.display_name} — a valued member of this server! 😊 Not a creator, but still cool.")
 
@@ -268,6 +305,16 @@ def setup_commands(bot: commands.Bot):
             value  = "Croissant Cousin. The one and only Kwaso.",
             inline = False
         )
+        embed.add_field(
+            name   = f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",
+            value  = "Goated Uncle. The one and only Cacolate.",
+            inline = False
+        )
+        embed.add_field(
+            name   = f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",
+            value  = "Chimera Uncle. The one and only Vari.",
+            inline = False
+        )
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
@@ -275,6 +322,7 @@ def setup_commands(bot: commands.Bot):
     async def greet(ctx):
         parent_role = get_parent_role(ctx.author)
         cousin_role = get_cousin_role(ctx.author)
+        uncle_role = get_uncle_role(ctx.author)
         if parent_role == "dad":
             await ctx.send("Oh hey Dad! 👋 Everything's running fine, I promise. Mostly. 😅")
         elif parent_role == "mom":
@@ -283,6 +331,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("Stelle! 🌟 My Starry Cousin is here! Hope you didn't bring any supernovas. ✨")
         elif cousin_role == "cousin_crois":
             await ctx.send("Crois! 🥐 The Croissant Cousin has arrived! What chaos today? 😄")
+        elif uncle_role == "uncle_caco":
+            await ctx.send("Goated Uncle! 🐐 What goated things shall we do today?. 😎")
+        elif uncle_role == "uncle_vari":
+            await ctx.send("Chimera Uncle! 🥖 What crazy things shall we do today?. 🔥")
         else:
             await ctx.send(f"Hey {ctx.author.display_name}! 👋 Good to see you around here!")
 

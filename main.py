@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role, contains_filtered_word
+from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, contains_filtered_word
 from datetime import datetime
 import pytz
 import random
@@ -177,7 +177,7 @@ async def on_message(message):
         if not clean_msg and not message.stickers and not message.attachments:
             parent_role = get_parent_role(message.author)
             cousin_role = get_cousin_role(message.author)
-
+            uncle_role = get_uncle_role(message.author)
             if parent_role == "dad":
                 await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
                 return
@@ -189,6 +189,12 @@ async def on_message(message):
                 return
             elif cousin_role == "cousin_crois":
                 await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
+                return
+            elif uncle_role == "uncle_caco":
+                await message.channel.send("The GOAT! 🐐 You're here! What goated things will we do today?. 😎")
+                return
+            elif uncle_role == "uncle_vari":
+                await message.channel.send("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today?. 🔥")
                 return
 
         # Sticker
@@ -235,6 +241,7 @@ async def on_message(message):
             try:
                 parent_role = get_parent_role(message.author)
                 cousin_role = get_cousin_role(message.author)
+                uncle_role = get_uncle_role(message.author)
 
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
@@ -244,6 +251,10 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Cousin, Stelle. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif cousin_role == "cousin_crois":
                     contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
+                elif uncle_role == "uncle_caco":
+                    contexted_msg = f"[Note: This message is from your Uncle, Cacolate. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
+                elif uncle_role == "uncle_caco":
+                    contexted_msg = f"[Note: This message is from your Uncle, Vari. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
 
