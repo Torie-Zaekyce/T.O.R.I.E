@@ -1,6 +1,7 @@
 # commands.py — T.O.R.I.E.'s Bot Commands
 
 import discord
+import re
 from discord.ext import commands
 
 
@@ -35,22 +36,45 @@ COUSIN = {
 }
 
 FILTERED_WORDS = [
-    "Nigger",
-    "Nigga",
-    "Niqqa",
-    "Niqga",
-    "Niqg4",
-    "Niqq3r",
-    "Niqqer",
-    "Niqger",
-    "Niqg3r",
+    "nigger",
+    "nigga",
+    "negro",
+    "negra",
 ]
+
+# Leet speak and character substitution map
+NORMALIZER = str.maketrans({
+    "0": "o",  "1": "i",  "3": "e",  "4": "a",
+    "5": "s",  "6": "g",  "7": "t",  "8": "b",
+    "@": "a",  "$": "s",  "!": "i",  "+": "t",
+    "(": "c",  ")": "o",  "*": "",   ".": "",
+    "_": "",   "-": "",   " ": "",
+    # Cyrillic lookalikes
+    "а": "a",  "е": "e",  "о": "o",  "р": "p",
+    "с": "c",  "х": "x",  "и": "n",  "g": "g",
+    # Common unicode lookalikes
+    "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
+    "ñ": "n",  "η": "n",
+})
+
+
+def normalize(text: str) -> str:
+    text = text.lower()
+    text = text.translate(NORMALIZER)
+
+    text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
+
+    text = re.sub(r'(.)\1{2,}', r'\1\1', text)
+
+    text = re.sub(r'[^a-z0-9]', '', text)
+    return text
 
 
 def contains_filtered_word(content: str) -> str | None:
-    lowered = content.lower()
+    normalized = normalize(content)
     for word in FILTERED_WORDS:
-        if word.lower() in lowered:
+        normalized_word = normalize(word)
+        if normalized_word in normalized:
             return word
     return None
 
