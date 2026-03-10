@@ -50,7 +50,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(
-    command_prefix = commands.when_mentioned_or("!"),
+    command_prefix = "!",   # ! prefix for commands only
     intents        = intents
 )
 
@@ -151,7 +151,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # Filter check
+    # Filter check — runs on every message
     if contains_filtered_word(message.content):
         try:
             await message.delete()
@@ -163,6 +163,12 @@ async def on_message(message):
             print(f"⚠️ Missing permissions to delete message in #{message.channel.name}")
         return
 
+    # ! prefix → commands only, no chat
+    if message.content.startswith("!"):
+        await bot.process_commands(message)
+        return
+
+    # @ mention → chat only, no commands
     if torie.is_bot_mentioned(message, bot.user):
         clean_msg = torie.clean_mention(message.content, bot.user.id)
 
@@ -246,8 +252,6 @@ async def on_message(message):
                 reply = "Hmm, my brain glitched. Try again? 😅"
 
         await message.channel.send(reply)
-
-    await bot.process_commands(message)
 
 
 if __name__ == "__main__":
