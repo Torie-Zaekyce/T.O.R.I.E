@@ -10,15 +10,15 @@ import os
 
 # T.O.R.I.E. — Discord Bot
 
-DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
+DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
 GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_FALLBACK      = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-TIMEZONE           = pytz.timezone("Asia/Manila")   
-GREET_HOUR         = 7                             
-GENERAL_CHANNEL    = "🔮﹑milkyway﹒꒱"  
+TIMEZONE           = pytz.timezone("Asia/Manila")
+GREET_HOUR         = 7
+GENERAL_CHANNEL    = 1242875666265800806
 
 MORNING_GREETINGS = [
     "Good morning everyone! ☀️ Rise and shine — or at least rise. Shining is optional.",
@@ -87,7 +87,7 @@ class Torie(ToriePersonality):
 
         except Exception as e:
             if "429" in str(e) and active_model != GROQ_FALLBACK:
-                print(f"⚠️ Rate limit hit on {active_model} — switching to fallback {GROQ_FALLBACK}")
+                print(f"⚠️ Rate limit hit on {active_model} — switching to {GROQ_FALLBACK}")
                 return self.generate_response(user_message, model=GROQ_FALLBACK)
             raise
 
@@ -121,16 +121,19 @@ class Torie(ToriePersonality):
 torie = Torie()
 setup_commands(bot)
 
+
 @tasks.loop(minutes=1)
 async def morning_greeting():
     now = datetime.now(TIMEZONE)
     if now.hour == GREET_HOUR and now.minute == 0:
-        for guild in bot.guilds:
-            channel = discord.utils.get(guild.text_channels, name=GENERAL_CHANNEL)
-            if channel:
-                greeting = random.choice(MORNING_GREETINGS)
-                await channel.send(greeting)
-                print(f"✅ Morning greeting sent to #{GENERAL_CHANNEL} in {guild.name}")
+        channel = bot.get_channel(GENERAL_CHANNEL)
+        if channel:
+            greeting = random.choice(MORNING_GREETINGS)
+            await channel.send(greeting)
+            print(f"✅ Morning greeting sent to #{channel.name}")
+        else:
+            print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
+
 
 @bot.event
 async def on_ready():
@@ -138,6 +141,9 @@ async def on_ready():
     print(f"   Primary Model  : {GROQ_MODEL}")
     print(f"   Fallback Model : {GROQ_FALLBACK}")
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
+    print(f"   Timezone       : Philippines (PHT)")
+    print(f"   Morning Greet  : {GREET_HOUR}:00 AM PHT → channel ID {GENERAL_CHANNEL}")
+    morning_greeting.start()
 
 
 @bot.event
@@ -145,6 +151,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # Filter check
     if contains_filtered_word(message.content):
         try:
             await message.delete()
@@ -159,22 +166,23 @@ async def on_message(message):
     if torie.is_bot_mentioned(message, bot.user):
         clean_msg = torie.clean_mention(message.content, bot.user.id)
 
-        # Parent recognition — respond differently to dad and mom
-        parent_role = get_parent_role(message.author)
-        if parent_role and not clean_msg and not message.stickers and not message.attachments:
+        # Empty mention — parent/cousin special greetings
+        if not clean_msg and not message.stickers and not message.attachments:
+            parent_role = get_parent_role(message.author)
+            cousin_role = get_cousin_role(message.author)
+
             if parent_role == "dad":
                 await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
+                return
             elif parent_role == "mom":
                 await message.channel.send("Mom! 💙 You're here! I've been on my best behavior, I promise.")
-            return
-        
-        cousin_role = get_cousin_role(message.author)
-        if cousin_role and not clean_msg and not message.stickers and not message.attachments:
-            if cousin_role == "cousin_stelle":
-                await message.channel.send("Stelle! 🌟 My Starry Cousin!. Hope you don't turn into a supernova purple star. ✨")
+                return
+            elif cousin_role == "cousin_stelle":
+                await message.channel.send("Stelle! 🌟 My Starry Cousin! Hope you don't turn into a supernova purple star. ✨")
+                return
             elif cousin_role == "cousin_crois":
-                await message.channel.send("Crois! 🥐 You're here! I've been on my best behavior, I promise.")
-            return
+                await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
+                return
 
         # Sticker
         if message.stickers:
@@ -210,26 +218,24 @@ async def on_message(message):
                 await message.channel.send(reply)
                 return
 
-        # Empty mention
+        # Empty mention with no special role
         if not clean_msg:
             await message.channel.send("Hey! You mentioned me — what do you need? 😊")
             return
 
-        # Text
+        # Text — inject family context
         async with message.channel.typing():
             try:
                 parent_role = get_parent_role(message.author)
+                cousin_role = get_cousin_role(message.author)
+
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
                     contexted_msg = f"[Note: This message is from your Mom, Nen. Treat her with extra warmth and love.]\n{clean_msg}"
-                else:
-                    contexted_msg = clean_msg
-
-                cousin_role = get_cousin_role(message.author)
-                if parent_role == "cousin_stelle":
+                elif cousin_role == "cousin_stelle":
                     contexted_msg = f"[Note: This message is from your Cousin, Stelle. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif parent_role == "cousin_crois":
+                elif cousin_role == "cousin_crois":
                     contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
