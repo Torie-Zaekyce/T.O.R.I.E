@@ -46,7 +46,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(
-    command_prefix = "!",
+    command_prefix = "t!",
     help_command   = None,
     intents        = intents
 )
