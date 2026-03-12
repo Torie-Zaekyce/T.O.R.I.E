@@ -46,7 +46,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(
-    command_prefix = "t!",
+    command_prefix = "!",
     help_command   = None,
     intents        = intents
 )
@@ -170,7 +170,7 @@ async def on_message(message):
             print(f"⚠️ Missing permissions to delete message in #{message.channel.name}")
         return
 
-    # ! prefix → commands only, no chat
+    # t! prefix → commands only, no chat
     if message.content.startswith("t!"):
         await bot.process_commands(message)
         return

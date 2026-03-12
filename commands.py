@@ -13,7 +13,7 @@ PARENTS = {
         "role":     "Creator"
     },
     "mom": {
-        "username": "Nen",
+        "username": "0648722",
         "id":       1370105227117592676,
         "title":    "Mom",
         "role":     "Co-Creator"
@@ -209,6 +209,19 @@ def setup_commands(bot: commands.Bot):
                 "`@T.O.R.I.E. + image` — Send me an image to react to\n"
                 "`@T.O.R.I.E. + sticker` — Send me a sticker\n"
                 "`@T.O.R.I.E. advice on <topic>` — Get genuine advice from me"
+            ),
+            inline = False
+        )
+        embed.add_field(
+            name   = "🎵 Music",
+            value  = (
+                "`t!play <song>` — Join voice and play a song\n"
+                "`t!skip` — Skip the current song\n"
+                "`t!pause` / `t!resume` — Pause or resume\n"
+                "`t!queue` — Show the song queue\n"
+                "`t!nowplaying` — Show current song\n"
+                "`t!volume <1-100>` — Set volume\n"
+                "`t!stop` — Stop and disconnect"
             ),
             inline = False
         )
