@@ -179,26 +179,26 @@ def setup_commands(bot: commands.Bot):
     async def help_command(ctx):
         embed = discord.Embed(
             title       = "📖 T.O.R.I.E. Command List",
-            description = "Here's everything I can do! Mention me or use `!` prefix.",
+            description = "Here's everything I can do! Mention me or use `t!` prefix.",
             color       = discord.Color.blurple()
         )
         embed.add_field(
             name   = "🤖 General",
             value  = (
-                "`!ping` — Check if I'm alive + latency\n"
-                "`!whoami` — Find out who you are to me\n"
-                "`!greet` — Get a personalized greeting\n"
-                "`!family` — See my whole family"
+                "`t!ping` — Check if I'm alive + latency\n"
+                "`t!whoami` — Find out who you are to me\n"
+                "`t!greet` — Get a personalized greeting\n"
+                "`t!family` — See my whole family"
             ),
             inline = False
         )
         embed.add_field(
             name   = "🚫 Moderation",
             value  = (
-                "`!filter add <word>` — Add a word to the filter *(parents only)*\n"
-                "`!filter remove <word>` — Remove a word from the filter *(parents only)*\n"
-                "`!filter list` — Show all currently filtered words *(parents only)*\n"
-                "`!filter clear` — Clear all filtered words *(parents only)*"
+                "`t!filter add <word>` — Add a word to the filter *(parents only)*\n"
+                "`t!filter remove <word>` — Remove a word from the filter *(parents only)*\n"
+                "`t!filter list` — Show all currently filtered words *(parents only)*\n"
+                "`t!filter clear` — Clear all filtered words *(parents only)*"
             ),
             inline = False
         )
@@ -219,7 +219,7 @@ def setup_commands(bot: commands.Bot):
 
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
-        await ctx.send("Usage: `!filter add <word>` | `!filter remove <word>` | `!filter list` | `!filter clear`")
+        await ctx.send("Usage: `t!filter add <word>` | `t!filter remove <word>` | `t!filter list` | `t!filter clear`")
 
     @filter_group.command(name="add")
     async def filter_add(ctx, *, word: str):
