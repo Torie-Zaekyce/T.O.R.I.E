@@ -295,7 +295,7 @@ async def on_message(message):
                 elif uncle_role == "uncle_vari":
                     contexted_msg = f"[Note: This message is from your Uncle, Vari. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif sister_role == "sister_abby":
-                    contexted_msg = f"[Note: This message is from your Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
+                    contexted_msg = f"[Note: This message is from your Big Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
 
