@@ -203,7 +203,7 @@ def setup_commands(bot: commands.Bot):
             inline = False
         )
         embed.add_field(
-            name   = "💬 Chat",
+            name   = "💬 Chat with me!",
             value  = (
                 "`@T.O.R.I.E. <message>` — Talk to me!\n"
                 "`@T.O.R.I.E. + image` — Send me an image to react to\n"
@@ -213,7 +213,7 @@ def setup_commands(bot: commands.Bot):
             inline = False
         )
         embed.add_field(
-            name   = "🎵 Music",
+            name   = "🎵 Play your favorite music with me!",
             value  = (
                 "`t!play <song>` — Join voice and play a song\n"
                 "`t!skip` — Skip the current song\n"
@@ -221,7 +221,8 @@ def setup_commands(bot: commands.Bot):
                 "`t!queue` — Show the song queue\n"
                 "`t!nowplaying` — Show current song\n"
                 "`t!volume <1-100>` — Set volume\n"
-                "`t!stop` — Stop and disconnect"
+                "`t!stop` — Stop and disconnect\n\n"
+                "⚠️ **Note:** Spotify is not available yet — YouTube only for now!"
             ),
             inline = False
         )
