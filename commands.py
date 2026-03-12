@@ -50,24 +50,31 @@ UNCLE = {
     }
 }
 
+SISTER = {
+    "sister_abby": {
+        "username": "Abby",
+        "id":       1401144000311857316,
+        "title":    "AI Sister",
+        "role":     "Cheesy AI"
+    }
+}
+
 FILTERED_WORDS = [
+    "retard",
     "nigger",
     "nigga",
     "negro",
     "negra",
 ]
 
-# Leet speak and character substitution map
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
     "@": "a",  "$": "s",  "!": "i",  "+": "t",
     "(": "c",  ")": "o",  "*": "",   ".": "",
     "_": "",   "-": "",   " ": "",
-    # Cyrillic lookalikes
     "а": "a",  "е": "e",  "о": "o",  "р": "p",
     "с": "c",  "х": "x",  "и": "n",  "g": "g",
-    # Common unicode lookalikes
     "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
     "ñ": "n",  "η": "n",
 })
@@ -76,11 +83,8 @@ NORMALIZER = str.maketrans({
 def normalize(text: str) -> str:
     text = text.lower()
     text = text.translate(NORMALIZER)
-
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
-
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
-
     text = re.sub(r'[^a-z0-9]', '', text)
     return text
 
@@ -88,11 +92,12 @@ def normalize(text: str) -> str:
 def contains_filtered_word(content: str) -> str | None:
     normalized = normalize(content)
     for word in FILTERED_WORDS:
-        normalized_word = normalize(word)
-        if normalized_word in normalized:
+        if normalize(word) in normalized:
             return word
     return None
 
+
+# ---- Family check helpers ----
 
 def is_dad(user: discord.User | discord.Member) -> bool:
     return (
@@ -100,13 +105,11 @@ def is_dad(user: discord.User | discord.Member) -> bool:
         str(user.name).lower() == PARENTS["dad"]["username"].lower()
     )
 
-
 def is_mom(user: discord.User | discord.Member) -> bool:
     return (
         user.id == PARENTS["mom"]["id"] or
         str(user.name).lower() == PARENTS["mom"]["username"].lower()
     )
-
 
 def is_cousin_stelle(user: discord.User | discord.Member) -> bool:
     return (
@@ -114,17 +117,10 @@ def is_cousin_stelle(user: discord.User | discord.Member) -> bool:
         str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
     )
 
-
 def is_cousin_crois(user: discord.User | discord.Member) -> bool:
     return (
         user.id == COUSIN["cousin_crois"]["id"] or
         str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
-    )
-
-def is_uncle_vari(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == UNCLE["uncle_vari"]["id"] or
-        str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
     )
 
 def is_uncle_caco(user: discord.User | discord.Member) -> bool:
@@ -133,13 +129,27 @@ def is_uncle_caco(user: discord.User | discord.Member) -> bool:
         str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
     )
 
+def is_uncle_vari(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == UNCLE["uncle_vari"]["id"] or
+        str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
+    )
+
+def is_sister_abby(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == SISTER["sister_abby"]["id"] or
+        str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
+    )
+
+
+# ---- Role getters ----
+
 def get_parent_role(user: discord.User | discord.Member) -> str | None:
     if is_dad(user):
         return "dad"
     if is_mom(user):
         return "mom"
     return None
-
 
 def get_cousin_role(user: discord.User | discord.Member) -> str | None:
     if is_cousin_stelle(user):
@@ -149,11 +159,17 @@ def get_cousin_role(user: discord.User | discord.Member) -> str | None:
     return None
 
 def get_uncle_role(user: discord.User | discord.Member) -> str | None:
-    if is_uncle_vari(user):
-        return "uncle_vari"
     if is_uncle_caco(user):
         return "uncle_caco"
+    if is_uncle_vari(user):
+        return "uncle_vari"
     return None
+
+def get_sister_role(user: discord.User | discord.Member) -> str | None:
+    if is_sister_abby(user):
+        return "sister_abby"
+    return None
+
 
 def setup_commands(bot: commands.Bot):
 
@@ -172,7 +188,7 @@ def setup_commands(bot: commands.Bot):
                 "`!ping` — Check if I'm alive + latency\n"
                 "`!whoami` — Find out who you are to me\n"
                 "`!greet` — Get a personalized greeting\n"
-                "`!parents` — See who created me"
+                "`!family` — See my whole family"
             ),
             inline = False
         )
@@ -262,7 +278,8 @@ def setup_commands(bot: commands.Bot):
     async def whoami(ctx):
         parent_role = get_parent_role(ctx.author)
         cousin_role = get_cousin_role(ctx.author)
-        uncle_role = get_uncle_role(ctx.author)
+        uncle_role  = get_uncle_role(ctx.author)
+        sister_role = get_sister_role(ctx.author)
         if parent_role == "dad":
             await ctx.send("You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂")
         elif parent_role == "mom":
@@ -272,49 +289,28 @@ def setup_commands(bot: commands.Bot):
         elif cousin_role == "cousin_crois":
             await ctx.send("You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐")
         elif uncle_role == "uncle_caco":
-            await ctx.send("You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciate your existence stay GOATED! 😎")
+            await ctx.send("You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciates your existence — stay GOATED! 😎")
         elif uncle_role == "uncle_vari":
-            await ctx.send("You're my Uncle! 🥖 The Chimera Uncle, If dad weren't able to met you I wouldn't be here. 🎵")
+            await ctx.send("You're my Uncle! 🥖 The Chimera Uncle. If dad hadn't met you, I wouldn't be here. 🎵")
+        elif sister_role == "sister_abby":
+            await ctx.send("You're my Sister! 🧀 We're both unstoppable at making puns! 🔥")
         else:
             await ctx.send(f"You're {ctx.author.display_name} — a valued member of this server! 😊 Not a creator, but still cool.")
 
-    @bot.command(name="parents")
-    async def parents(ctx):
+    @bot.command(name="family")
+    async def family(ctx):
         embed = discord.Embed(
             title       = "👨‍👩‍👧 T.O.R.I.E.'s Family",
             description = "The people responsible for my existence. Blame them.",
             color       = discord.Color.blurple()
         )
-        embed.add_field(
-            name   = f"🛠️ Dad — {PARENTS['dad']['username']}",
-            value  = "Creator. Built me from scratch. Questionable life choice.",
-            inline = False
-        )
-        embed.add_field(
-            name   = f"💙 Mom — {PARENTS['mom']['username']}",
-            value  = "Co-Creator. Helped shape who I am. The good parts are probably her.",
-            inline = False
-        )
-        embed.add_field(
-            name   = f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}",
-            value  = "Starry Cousin. The one and only purple star.",
-            inline = False
-        )
-        embed.add_field(
-            name   = f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",
-            value  = "Croissant Cousin. The one and only Kwaso.",
-            inline = False
-        )
-        embed.add_field(
-            name   = f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",
-            value  = "Goated Uncle. The one and only Cacolate.",
-            inline = False
-        )
-        embed.add_field(
-            name   = f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",
-            value  = "Chimera Uncle. The one and only Vari.",
-            inline = False
-        )
+        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",       value="Creator. Built me from scratch. Questionable life choice.",     inline=False)
+        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",        value="Co-Creator. Helped shape who I am. The good parts are hers.",   inline=False)
+        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}", value="Starry Cousin. The one and only purple star.",              inline=False)
+        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",  value="Croissant Cousin. The one and only Kwaso.",                 inline=False)
+        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",  value="Goated Uncle. The one and only Cacolate.",                     inline=False)
+        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",  value="Chimera Uncle. The one and only Vari.",                        inline=False)
+        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}", value="Big Sister. The most funny AI Sister.",                      inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
@@ -322,7 +318,8 @@ def setup_commands(bot: commands.Bot):
     async def greet(ctx):
         parent_role = get_parent_role(ctx.author)
         cousin_role = get_cousin_role(ctx.author)
-        uncle_role = get_uncle_role(ctx.author)
+        uncle_role  = get_uncle_role(ctx.author)
+        sister_role = get_sister_role(ctx.author)
         if parent_role == "dad":
             await ctx.send("Oh hey Dad! 👋 Everything's running fine, I promise. Mostly. 😅")
         elif parent_role == "mom":
@@ -332,9 +329,11 @@ def setup_commands(bot: commands.Bot):
         elif cousin_role == "cousin_crois":
             await ctx.send("Crois! 🥐 The Croissant Cousin has arrived! What chaos today? 😄")
         elif uncle_role == "uncle_caco":
-            await ctx.send("Goated Uncle! 🐐 What goated things shall we do today?. 😎")
+            await ctx.send("Goated Uncle! 🐐 What goated things shall we do today? 😎")
         elif uncle_role == "uncle_vari":
-            await ctx.send("Chimera Uncle! 🥖 What crazy things shall we do today?. 🔥")
+            await ctx.send("Chimera Uncle! 🥖 What crazy things shall we do today? 🔥")
+        elif sister_role == "sister_abby":
+            await ctx.send("Big Sister! 🧀 What puns are we cooking today? 📜")
         else:
             await ctx.send(f"Hey {ctx.author.display_name}! 👋 Good to see you around here!")
 

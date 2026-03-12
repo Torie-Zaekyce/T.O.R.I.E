@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, contains_filtered_word
+from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, contains_filtered_word
 from datetime import datetime
 import pytz
 import random
@@ -18,6 +18,8 @@ GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 TIMEZONE           = pytz.timezone("Asia/Manila")
 GREET_HOUR         = 7
+LUNCH_HOUR         = 12
+EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
 
 MORNING_GREETINGS = [
@@ -29,6 +31,28 @@ MORNING_GREETINGS = [
     "Good morning! ☀️ I'd say sleep well but honestly, did any of us? Either way, here we are!",
     "Morning everyone! ☀️ Today is a fresh start. Don't waste it. Unless you need to. Then waste it a little.",
     "Good morning! ☀️ T.O.R.I.E. is online and fully operational. Unlike some of you at 7am. 😂",
+]
+
+LUNCH_REMINDERS = [
+    "🍽️ It's lunchtime! Step away from the screen and go eat something. Yes, you. Right now.",
+    "🥗 Lunch o'clock! Your body has been running on vibes since morning — feed it please. 🍱",
+    "🍜 Hey! It's 12PM. Have you eaten? Don't make me ask twice. 😤 Go grab lunch!",
+    "🍛 Lunchtime reminder from your favorite bot — eat a real meal, not just snacks. 👀",
+    "🥙 It's noon! The food won't eat itself. Go take a break and have lunch — you deserve it. 💙",
+    "🍔 12PM check-in: are you fed? Hydrated? Okay good. Now go eat lunch if not! 😄",
+    "🍣 Lunchtime! Your brain needs fuel and I need you functioning. Go eat something good! ☀️",
+    "🥘 Hey humans! It's midday — that means lunch. I will not be taking no for an answer. 😤",
+]
+
+EVENING_GREETINGS = [
+    "Good evening everyone! 🌙 You made it through the day — and honestly? That took effort. Well done. 💙",
+    "🌙 Evening! Whatever you tackled today, big or small — you showed up. That counts. Be proud.",
+    "Good evening! 🌆 The day is winding down. Take a breath. You did well today, even if it didn't feel like it.",
+    "🌙 Hey everyone, good evening! Today wasn't easy but you got through it. That's worth celebrating. 🎉",
+    "Evening! 🌇 Reminder: you did your best today and that's genuinely enough. Rest up. 💙",
+    "Good evening! 🌙 Another day survived. Go rest, eat something good, and be kind to yourself tonight.",
+    "🌆 The sun is setting and so should your stress. Good evening everyone — you did great today. 💙",
+    "Good evening! 🌙 T.O.R.I.E. signing in for the evening check-in: you did well. Be proud of yourself. 🌟",
 ]
 
 if not DISCORD_TOKEN:
@@ -51,7 +75,7 @@ intents.message_content = True
 
 bot = commands.Bot(
     command_prefix = "!",
-    help_command   = None,  
+    help_command   = None,
     intents        = intents
 )
 
@@ -124,16 +148,25 @@ setup_commands(bot)
 
 
 @tasks.loop(minutes=1)
-async def morning_greeting():
+async def scheduled_announcements():
     now = datetime.now(TIMEZONE)
-    if now.hour == GREET_HOUR and now.minute == 0:
-        channel = bot.get_channel(GENERAL_CHANNEL)
-        if channel:
-            greeting = random.choice(MORNING_GREETINGS)
-            await channel.send(greeting)
-            print(f"✅ Morning greeting sent to #{channel.name}")
-        else:
-            print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
+    if now.minute != 0:
+        return
+
+    channel = bot.get_channel(GENERAL_CHANNEL)
+    if not channel:
+        print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
+        return
+
+    if now.hour == GREET_HOUR:
+        await channel.send(random.choice(MORNING_GREETINGS))
+        print(f"✅ Morning greeting sent to #{channel.name}")
+    elif now.hour == LUNCH_HOUR:
+        await channel.send(random.choice(LUNCH_REMINDERS))
+        print(f"✅ Lunch reminder sent to #{channel.name}")
+    elif now.hour == EVENING_HOUR:
+        await channel.send(random.choice(EVENING_GREETINGS))
+        print(f"✅ Evening greeting sent to #{channel.name}")
 
 
 @bot.event
@@ -143,8 +176,8 @@ async def on_ready():
     print(f"   Fallback Model : {GROQ_FALLBACK}")
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
     print(f"   Timezone       : Philippines (PHT)")
-    print(f"   Morning Greet  : {GREET_HOUR}:00 AM PHT → channel ID {GENERAL_CHANNEL}")
-    morning_greeting.start()
+    print(f"   Schedules      : 7AM morning | 12PM lunch | 7PM evening → channel ID {GENERAL_CHANNEL}")
+    scheduled_announcements.start()
 
 
 @bot.event
@@ -173,11 +206,13 @@ async def on_message(message):
     if torie.is_bot_mentioned(message, bot.user):
         clean_msg = torie.clean_mention(message.content, bot.user.id)
 
-        # Empty mention — parent/cousin special greetings
+        # Empty mention — family special greetings
         if not clean_msg and not message.stickers and not message.attachments:
             parent_role = get_parent_role(message.author)
             cousin_role = get_cousin_role(message.author)
-            uncle_role = get_uncle_role(message.author)
+            uncle_role  = get_uncle_role(message.author)
+            sister_role = get_sister_role(message.author)
+
             if parent_role == "dad":
                 await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
                 return
@@ -191,10 +226,13 @@ async def on_message(message):
                 await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
                 return
             elif uncle_role == "uncle_caco":
-                await message.channel.send("The GOAT! 🐐 You're here! What goated things will we do today?. 😎")
+                await message.channel.send("The GOAT! 🐐 You're here! What goated things will we do today? 😎")
                 return
             elif uncle_role == "uncle_vari":
-                await message.channel.send("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today?. 🔥")
+                await message.channel.send("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥")
+                return
+            elif sister_role == "sister_abby":
+                await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
                 return
 
         # Sticker
@@ -241,7 +279,8 @@ async def on_message(message):
             try:
                 parent_role = get_parent_role(message.author)
                 cousin_role = get_cousin_role(message.author)
-                uncle_role = get_uncle_role(message.author)
+                uncle_role  = get_uncle_role(message.author)
+                sister_role = get_sister_role(message.author)
 
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
@@ -253,8 +292,10 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif uncle_role == "uncle_caco":
                     contexted_msg = f"[Note: This message is from your Uncle, Cacolate. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-                elif uncle_role == "uncle_caco":
+                elif uncle_role == "uncle_vari":
                     contexted_msg = f"[Note: This message is from your Uncle, Vari. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
+                elif sister_role == "sister_abby":
+                    contexted_msg = f"[Note: This message is from your Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
 
