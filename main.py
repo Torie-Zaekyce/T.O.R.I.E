@@ -171,7 +171,7 @@ async def on_message(message):
         return
 
     # ! prefix → commands only, no chat
-    if message.content.startswith("!"):
+    if message.content.startswith("t!"):
         await bot.process_commands(message)
         return
 
