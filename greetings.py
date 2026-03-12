@@ -22,6 +22,17 @@ LUNCH_REMINDERS = [
     "🥘 Hey humans! It's midday — that means lunch. I will not be taking no for an answer. 😤",
 ]
 
+DINNER_REMINDERS = [
+    "🍽️ Dinner time! Close the laptop, put the phone down, and go eat a proper meal. You've earned it. 💙",
+    "🌙 Hey! It's dinner o'clock. Whatever today threw at you, a good meal makes everything a little better. 🍜",
+    "🍛 Dinner reminder from T.O.R.I.E. — please eat something warm and real tonight. No skipping! 😤",
+    "🥘 It's dinner time, everyone! Go fuel up, rest those eyes, and enjoy a good meal. You deserve it. 🌟",
+    "🍲 Hey humans! Dinner won't eat itself. Step away, sit down, and enjoy your evening meal. 💙",
+    "🍱 Dinner time check-in! Have you eaten? No? Go fix that right now. Yes? Amazing, proud of you. 😄",
+    "🌆 T.O.R.I.E. dinner alert! A good evening starts with a good meal. Go eat something delicious. 🍜",
+    "🍽️ It's that time! Dinner is calling your name — don't keep it waiting. Eat well tonight! 💙",
+]
+
 EVENING_GREETINGS = [
     "Good evening everyone! 🌙 You made it through the day — and honestly? That took effort. Well done. 💙",
     "🌙 Evening! Whatever you tackled today, big or small — you showed up. That counts. Be proud.",

@@ -4,26 +4,28 @@ from groq import Groq
 from personality import ToriePersonality
 from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, contains_filtered_word
 from music import setup_music
-from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, EVENING_GREETINGS
+from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS
 from datetime import datetime
 from dotenv import load_dotenv
 import pytz
 import random
 import os
-
+ 
 load_dotenv()
-
+ 
 # T.O.R.I.E. — Discord Bot
-
+ 
 DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
 GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_FALLBACK      = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
-
+ 
 TIMEZONE           = pytz.timezone("Asia/Manila")
 GREET_HOUR         = 7
 LUNCH_HOUR         = 12
+DINNER_HOUR        = 19
+DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
 
@@ -123,21 +125,24 @@ setup_music(bot)
 @tasks.loop(minutes=1)
 async def scheduled_announcements():
     now = datetime.now(TIMEZONE)
-    if now.minute != 0:
+    if now.minute not in (0, 30):
         return
-
+ 
     channel = bot.get_channel(GENERAL_CHANNEL)
     if not channel:
         print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
         return
-
-    if now.hour == GREET_HOUR:
+ 
+    if now.hour == GREET_HOUR and now.minute == 0:
         await channel.send(random.choice(MORNING_GREETINGS))
         print(f"✅ Morning greeting sent to #{channel.name}")
-    elif now.hour == LUNCH_HOUR:
+    elif now.hour == LUNCH_HOUR and now.minute == 0:
         await channel.send(random.choice(LUNCH_REMINDERS))
         print(f"✅ Lunch reminder sent to #{channel.name}")
-    elif now.hour == EVENING_HOUR:
+    elif now.hour == DINNER_HOUR and now.minute == DINNER_MINUTE:
+        await channel.send(random.choice(DINNER_REMINDERS))
+        print(f"✅ Dinner reminder sent to #{channel.name}")
+    elif now.hour == EVENING_HOUR and now.minute == 0:
         await channel.send(random.choice(EVENING_GREETINGS))
         print(f"✅ Evening greeting sent to #{channel.name}")
 
