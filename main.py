@@ -211,6 +211,8 @@ async def on_message(message):
                 return
             elif sister_role == "sister_abby":
                 await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
+            elif sister_role == "sister_kde":
+                await message.channel.send("Kde! 🩷 What crazy thing shall do today? 💖")
                 return
 
         # Sticker
@@ -274,6 +276,8 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Uncle, Vari. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif sister_role == "sister_abby":
                     contexted_msg = f"[Note: This message is from your Big Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
+                elif sister_role == "sister_kde":
+                    contexted_msg = f"[Note: This message is from your Big Sister, Kde. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
 

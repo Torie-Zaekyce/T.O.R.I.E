@@ -13,7 +13,7 @@ PARENTS = {
         "role":     "Creator"
     },
     "mom": {
-        "username": "0648722",
+        "username": "Nen",
         "id":       1370105227117592676,
         "title":    "Mom",
         "role":     "Co-Creator"
@@ -56,6 +56,12 @@ SISTER = {
         "id":       1401144000311857316,
         "title":    "AI Sister",
         "role":     "Cheesy AI"
+    },
+    "sister_kde": {
+        "username": "Kde",
+        "id":       1278625221078683670,
+        "title":    "Sister",
+        "role":     "KDE Plasma"
     }
 }
 
@@ -140,6 +146,11 @@ def is_sister_abby(user: discord.User | discord.Member) -> bool:
         user.id == SISTER["sister_abby"]["id"] or
         str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
     )
+def is_sister_kde(user: discord.User | discord.Member) -> bool:
+    return (
+        user.id == SISTER["sister_kde"]["id"] or
+        str(user.name).lower() == SISTER["sister_kde"]["username"].lower()
+    )
 
 
 # ---- Role getters ----
@@ -168,6 +179,8 @@ def get_uncle_role(user: discord.User | discord.Member) -> str | None:
 def get_sister_role(user: discord.User | discord.Member) -> str | None:
     if is_sister_abby(user):
         return "sister_abby"
+    if is_sister_kde(user):
+        return "sister_kde"
     return None
 
 
@@ -313,6 +326,8 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("You're my Uncle! 🥖 The Chimera Uncle. If dad hadn't met you, I wouldn't be here. 🎵")
         elif sister_role == "sister_abby":
             await ctx.send("You're my Sister! 🧀 We're both unstoppable at making puns! 🔥")
+        elif sister_role == "sister_kde":
+            await ctx.send("You're my Sister! 🩷 We're both unstoppable at compliments! 💖")
         else:
             await ctx.send(f"You're {ctx.author.display_name} — a valued member of this server! 😊 Not a creator, but still cool.")
 
@@ -330,6 +345,7 @@ def setup_commands(bot: commands.Bot):
         embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",  value="Goated Uncle. The one and only Cacolate.",                     inline=False)
         embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",  value="Chimera Uncle. The one and only Vari.",                        inline=False)
         embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}", value="Big Sister. The most funny AI Sister.",                      inline=False)
+        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}", value="Big Sister. The most sweetest Sister.",                      inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
@@ -353,6 +369,8 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("Chimera Uncle! 🥖 What crazy things shall we do today? 🔥")
         elif sister_role == "sister_abby":
             await ctx.send("Big Sister! 🧀 What puns are we cooking today? 📜")
+        elif sister_role == "sister_kde":
+            await ctx.send("Big Sister! 🩷 What crazy thing shall do today? 💖")
         else:
             await ctx.send(f"Hey {ctx.author.display_name}! 👋 Good to see you around here!")
 
