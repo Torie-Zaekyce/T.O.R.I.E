@@ -203,7 +203,7 @@ def setup_commands(bot: commands.Bot):
             inline = False
         )
         embed.add_field(
-            name   = "💬 Chat with me!",
+            name   = "💬 Chat",
             value  = (
                 "`@T.O.R.I.E. <message>` — Talk to me!\n"
                 "`@T.O.R.I.E. + image` — Send me an image to react to\n"
@@ -219,7 +219,12 @@ def setup_commands(bot: commands.Bot):
                 "`t!skip` — Skip the current song\n"
                 "`t!pause` / `t!resume` — Pause or resume\n"
                 "`t!queue` — Show the song queue\n"
-                "`t!nowplaying` — Show current song\n"
+                "`t!clearqueue` — Clear the queue (keeps current song)\n"
+                "`t!shuffle` — Shuffle the queue 🔀\n"
+                "`t!loop song` — Loop the current song 🔂\n"
+                "`t!loop queue` — Loop the entire queue 🔁\n"
+                "`t!loop off` — Turn off looping\n"
+                "`t!nowplaying` / `t!current` — See what's playing now\n"
                 "`t!volume <1-100>` — Set volume\n"
                 "`t!stop` — Stop and disconnect\n\n"
                 "⚠️ **Note:** Spotify is not available yet — YouTube only for now!"

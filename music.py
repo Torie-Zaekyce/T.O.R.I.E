@@ -1,11 +1,8 @@
-# music.py — T.O.R.I.E.'s Music System
-
 import discord
 import yt_dlp
-import spotipy
 import asyncio
+import random
 import os
-from spotipy.oauth2 import SpotifyClientCredentials
 from discord.ext import commands
 
 
@@ -18,11 +15,11 @@ YTDL_OPTIONS = {
 }
 
 YTDL_OPTIONS_PLAYLIST = {
-    "format":          "bestaudio/best",
-    "quiet":           True,
-    "no_warnings":     True,
-    "extract_flat":    "in_playlist",
-    "source_address":  "0.0.0.0",
+    "format":         "bestaudio/best",
+    "quiet":          True,
+    "no_warnings":    True,
+    "extract_flat":   "in_playlist",
+    "source_address": "0.0.0.0",
 }
 
 FFMPEG_OPTIONS = {
@@ -33,13 +30,51 @@ FFMPEG_OPTIONS = {
 ytdl          = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 ytdl_playlist = yt_dlp.YoutubeDL(YTDL_OPTIONS_PLAYLIST)
 
+queues:     dict[int, list] = {}
+loop_song:  dict[int, bool] = {}
+loop_queue: dict[int, bool] = {}
+
+
+def get_queue(guild_id: int) -> list:
+    if guild_id not in queues:
+        queues[guild_id] = []
+    return queues[guild_id]
+
+def is_looping_song(guild_id: int) -> bool:
+    return loop_song.get(guild_id, False)
+
+def is_looping_queue(guild_id: int) -> bool:
+    return loop_queue.get(guild_id, False)
+
+def format_duration(seconds) -> str:
+    mins, secs = divmod(int(seconds), 60)
+    return f"{mins}:{secs:02d}"
+
+def now_playing_embed(entry: dict, guild_id: int) -> discord.Embed:
+    embed = discord.Embed(
+        title       = "🎵 Now Playing",
+        description = f"**{entry['title']}**\nby {entry['artist']}",
+        color       = discord.Color.green()
+    )
+    if entry.get("art"):
+        embed.set_thumbnail(url=entry["art"])
+    if entry.get("album"):
+        embed.add_field(name="Album",    value=entry["album"],                    inline=True)
+    embed.add_field(    name="Duration", value=format_duration(entry["duration"]), inline=True)
+    if is_looping_song(guild_id):
+        embed.set_footer(text="🔂 Song loop is ON")
+    elif is_looping_queue(guild_id):
+        embed.set_footer(text="🔁 Queue loop is ON")
+    else:
+        embed.set_footer(text="T.O.R.I.E. Music — YouTube")
+    return embed
+
 
 def is_playlist(query: str) -> bool:
     return ("playlist?list=" in query or "&list=" in query) and "youtube.com" in query
 
 
 async def fetch_playlist(url: str, loop: asyncio.AbstractEventLoop) -> list[dict]:
-    """Fetch all entries from a YouTube playlist. Returns list of track dicts."""
     try:
         data = await loop.run_in_executor(
             None,
@@ -47,7 +82,6 @@ async def fetch_playlist(url: str, loop: asyncio.AbstractEventLoop) -> list[dict
         )
         if not data or "entries" not in data:
             return []
-
         tracks = []
         for entry in data["entries"]:
             if not entry:
@@ -61,7 +95,7 @@ async def fetch_playlist(url: str, loop: asyncio.AbstractEventLoop) -> list[dict
                 "duration":  entry.get("duration", 0),
                 "audio_url": f"https://www.youtube.com/watch?v={entry['id']}",
                 "yt_url":    f"https://www.youtube.com/watch?v={entry['id']}",
-                "pending":   True,   # audio URL needs resolving before playing
+                "pending":   True,
             })
         return tracks
     except Exception as e:
@@ -70,7 +104,6 @@ async def fetch_playlist(url: str, loop: asyncio.AbstractEventLoop) -> list[dict
 
 
 async def resolve_audio(entry: dict, loop: asyncio.AbstractEventLoop) -> dict | None:
-    """Resolve the actual stream URL for a pending playlist entry."""
     try:
         data = await loop.run_in_executor(
             None,
@@ -85,70 +118,10 @@ async def resolve_audio(entry: dict, loop: asyncio.AbstractEventLoop) -> dict | 
         print(f"⚠️ Resolve error for {entry['title']}: {e}")
         return None
 
-# ---- Queue store per guild ----
-queues: dict[int, list] = {}
-
-def get_queue(guild_id: int) -> list:
-    if guild_id not in queues:
-        queues[guild_id] = []
-    return queues[guild_id]
-
-
-# ---- Spotify helpers ----
-# Initialized lazily so load_dotenv() in main.py runs first
-
-def get_spotify():
-    client_id     = os.getenv("SPOTIFY_CLIENT_ID")
-    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        return None
-    try:
-        return spotipy.Spotify(auth_manager=SpotifyClientCredentials(
-            client_id     = client_id,
-            client_secret = client_secret
-        ))
-    except Exception as e:
-        print(f"⚠️ Spotify init error: {e}")
-        return None
-
-_sp = None
 
 def spotify_search(query: str) -> dict | None:
-    global _sp
-    if _sp is None:
-        _sp = get_spotify()
-        if _sp:
-            print("✅ Spotify connected!")
-        else:
-            print("⚠️ Spotify credentials missing — using YouTube only")
-    if not _sp:
-        return None
-    try:
-        results = _sp.search(q=query, type="track", limit=1)
-        tracks = results["tracks"]["items"]
-        if not tracks:
-            return None
-        track = tracks[0]
-        return {
-            "title":    track["name"],
-            "artist":   track["artists"][0]["name"],
-            "album":    track["album"]["name"],
-            "art":      track["album"]["images"][0]["url"] if track["album"]["images"] else None,
-            "url":      track["external_urls"]["spotify"],
-            "duration": track["duration_ms"] // 1000,
-            "query":    f"{track['name']} {track['artists'][0]['name']}",
-        }
-    except Exception as e:
-        print(f"⚠️ Spotify search error: {e}")
-        return None
+    return None
 
-
-def format_duration(seconds: int) -> str:
-    mins, secs = divmod(seconds, 60)
-    return f"{mins}:{secs:02d}"
-
-
-# ---- YouTube audio fetcher ----
 
 async def fetch_audio(query: str, loop: asyncio.AbstractEventLoop) -> dict | None:
     try:
@@ -170,35 +143,65 @@ async def fetch_audio(query: str, loop: asyncio.AbstractEventLoop) -> dict | Non
         return None
 
 
-# ---- Play next in queue ----
-# queue[0] is always the currently playing song
-# only pop when the song finishes to advance the queue
-
 def play_next(ctx: commands.Context):
-    queue = get_queue(ctx.guild.id)
-
-    if queue:
-        queue.pop(0)
+    queue    = get_queue(ctx.guild.id)
+    guild_id = ctx.guild.id
 
     if not queue:
-        asyncio.run_coroutine_threadsafe(
-            ctx.send("✅ Queue finished! Add more songs with `!play`."),
-            ctx.bot.loop
+        return
+
+    current = queue[0]
+
+    if is_looping_song(guild_id):
+        async def _replay():
+            entry = current
+            if entry.get("pending"):
+                resolved = await resolve_audio(entry, ctx.bot.loop)
+                if not resolved:
+                    queue.pop(0)
+                    play_next(ctx)
+                    return
+                entry    = resolved
+                queue[0] = entry
+
+            source = discord.FFmpegPCMAudio(entry["audio_url"], **FFMPEG_OPTIONS)
+            source = discord.PCMVolumeTransformer(source, volume=0.5)
+
+            def after(error):
+                if error:
+                    print(f"⚠️ Playback error: {error}")
+                play_next(ctx)
+
+            ctx.voice_client.play(source, after=after)
+
+        asyncio.run_coroutine_threadsafe(_replay(), ctx.bot.loop)
+        return
+
+    finished = queue.pop(0)
+
+    if is_looping_queue(guild_id):
+        finished["pending"] = True
+        queue.append(finished)
+
+    if not queue:
+        embed = discord.Embed(
+            description = "✅ Queue finished! Add more songs with `t!play`.",
+            color       = discord.Color.greyple()
         )
+        asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), ctx.bot.loop)
         return
 
     entry = queue[0]
 
     async def _play():
         nonlocal entry
-        # Resolve stream URL if this is a pending playlist entry
         if entry.get("pending"):
             resolved = await resolve_audio(entry, ctx.bot.loop)
             if not resolved:
                 queue.pop(0)
                 play_next(ctx)
                 return
-            entry = resolved
+            entry    = resolved
             queue[0] = entry
 
         source = discord.FFmpegPCMAudio(entry["audio_url"], **FFMPEG_OPTIONS)
@@ -210,7 +213,7 @@ def play_next(ctx: commands.Context):
             play_next(ctx)
 
         ctx.voice_client.play(source, after=after)
-        await ctx.send(f"⏭️ Now playing: **{entry['title']}** by {entry['artist']}")
+        await ctx.send(embed=now_playing_embed(entry, guild_id))
 
     asyncio.run_coroutine_threadsafe(_play(), ctx.bot.loop)
 
@@ -219,9 +222,9 @@ def setup_music(bot: commands.Bot):
 
     @bot.command(name="play", aliases=["p"])
     async def play(ctx, *, query: str):
-        """Join voice and play a song or playlist."""
         if not ctx.author.voice:
-            await ctx.send("⚠️ You need to be in a voice channel first! 🎧")
+            embed = discord.Embed(description="⚠️ You need to be in a voice channel first! 🎧", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
 
         vc = ctx.voice_client
@@ -232,11 +235,11 @@ def setup_music(bot: commands.Bot):
 
         async with ctx.typing():
 
-            # ---- Playlist ----
             if is_playlist(query):
                 tracks = await fetch_playlist(query, bot.loop)
                 if not tracks:
-                    await ctx.send("❌ Couldn't load that playlist. Make sure it's public! 🎵")
+                    embed = discord.Embed(description="❌ Couldn't load that playlist. Make sure it's public! 🎵", color=discord.Color.red())
+                    await ctx.send(embed=embed)
                     return
 
                 queue = get_queue(ctx.guild.id)
@@ -247,17 +250,16 @@ def setup_music(bot: commands.Bot):
                     description = f"Loaded **{len(tracks)} songs** into the queue.",
                     color       = discord.Color.blurple()
                 )
-                embed.set_footer(text="Songs will resolve as they play — first song may take a moment.")
+                embed.set_footer(text="Songs resolve as they play — first song may take a moment.")
                 await ctx.send(embed=embed)
 
-                # Start playing if nothing is currently playing
                 if not vc.is_playing() and not vc.is_paused():
-                    first = queue[0]
+                    first    = queue[0]
                     resolved = await resolve_audio(first, bot.loop)
                     if resolved:
                         queue[0] = resolved
-                        source = discord.FFmpegPCMAudio(resolved["audio_url"], **FFMPEG_OPTIONS)
-                        source = discord.PCMVolumeTransformer(source, volume=0.5)
+                        source   = discord.FFmpegPCMAudio(resolved["audio_url"], **FFMPEG_OPTIONS)
+                        source   = discord.PCMVolumeTransformer(source, volume=0.5)
 
                         def after(error):
                             if error:
@@ -265,16 +267,16 @@ def setup_music(bot: commands.Bot):
                             play_next(ctx)
 
                         vc.play(source, after=after)
-                        await ctx.send(f"🎵 Now playing: **{resolved['title']}** by {resolved['artist']}")
+                        await ctx.send(embed=now_playing_embed(resolved, ctx.guild.id))
                 return
 
-            # ---- Single song ----
             spotify_data = spotify_search(query)
             search_query = spotify_data["query"] if spotify_data else query
+            audio_data   = await fetch_audio(search_query, bot.loop)
 
-            audio_data = await fetch_audio(search_query, bot.loop)
             if not audio_data:
-                await ctx.send("❌ Couldn't find that song. Try a different search! 🎵")
+                embed = discord.Embed(description="❌ Couldn't find that song. Try a different search! 🎵", color=discord.Color.red())
+                await ctx.send(embed=embed)
                 return
 
             entry = {
@@ -302,75 +304,188 @@ def setup_music(bot: commands.Bot):
                     play_next(ctx)
 
                 vc.play(source, after=after)
-
-                embed = discord.Embed(
-                    title       = "🎵 Now Playing",
-                    description = f"**{entry['title']}** by {entry['artist']}",
-                    color       = discord.Color.green()
-                )
-                if entry["art"]:
-                    embed.set_thumbnail(url=entry["art"])
-                if entry["album"]:
-                    embed.add_field(name="Album",    value=entry["album"],                    inline=True)
-                embed.add_field(    name="Duration", value=format_duration(entry["duration"]), inline=True)
-                if entry["spotify"]:
-                    embed.add_field(name="Spotify",  value=f"[Open]({entry['spotify']})",      inline=True)
-                embed.set_footer(text="T.O.R.I.E. Music — powered by Spotify + YouTube")
-                await ctx.send(embed=embed)
+                await ctx.send(embed=now_playing_embed(entry, ctx.guild.id))
 
             else:
                 embed = discord.Embed(
                     title       = f"➕ Added to Queue — #{len(queue)}",
-                    description = f"**{entry['title']}** by {entry['artist']}",
+                    description = f"**{entry['title']}**\nby {entry['artist']}",
                     color       = discord.Color.blurple()
                 )
-                if entry["art"]:
+                if entry.get("art"):
                     embed.set_thumbnail(url=entry["art"])
                 embed.add_field(name="Duration", value=format_duration(entry["duration"]), inline=True)
-                if entry["spotify"]:
-                    embed.add_field(name="Spotify", value=f"[Open]({entry['spotify']})", inline=True)
                 await ctx.send(embed=embed)
 
     @bot.command(name="skip", aliases=["s"])
     async def skip(ctx):
         vc = ctx.voice_client
         if not vc or not vc.is_playing():
-            await ctx.send("⚠️ Nothing is playing right now.")
+            embed = discord.Embed(description="⚠️ Nothing is playing right now.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         vc.stop()
-        await ctx.send("⏭️ Skipped!")
+        embed = discord.Embed(description="⏭️ Skipped!", color=discord.Color.blurple())
+        await ctx.send(embed=embed)
 
     @bot.command(name="pause")
     async def pause(ctx):
         vc = ctx.voice_client
         if vc and vc.is_playing():
             vc.pause()
-            await ctx.send("⏸️ Paused.")
+            embed = discord.Embed(description="⏸️ Paused.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
         else:
-            await ctx.send("⚠️ Nothing is playing right now.")
+            embed = discord.Embed(description="⚠️ Nothing is playing right now.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
 
     @bot.command(name="resume")
     async def resume(ctx):
         vc = ctx.voice_client
         if vc and vc.is_paused():
             vc.resume()
-            await ctx.send("▶️ Resumed!")
+            embed = discord.Embed(description="▶️ Resumed!", color=discord.Color.green())
+            await ctx.send(embed=embed)
         else:
-            await ctx.send("⚠️ Nothing is paused right now.")
+            embed = discord.Embed(description="⚠️ Nothing is paused right now.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
 
     @bot.command(name="queue", aliases=["q"])
     async def queue_cmd(ctx):
         queue = get_queue(ctx.guild.id)
         if not queue:
-            await ctx.send("📋 The queue is empty! Use `!play <song>` to add something.")
+            embed = discord.Embed(description="📋 The queue is empty! Use `t!play <song>` to add something.", color=discord.Color.greyple())
+            await ctx.send(embed=embed)
             return
-        desc = "\n".join([
-            f"`{i+1}.` **{e['title']}** by {e['artist']} — {format_duration(e['duration'])}"
-            for i, e in enumerate(queue)
-        ])
+
+        per_page   = 10
+        total_pages = (len(queue) + per_page - 1) // per_page
+
+        def build_embed(page: int) -> discord.Embed:
+            start = page * per_page
+            end   = start + per_page
+            lines = []
+            for i, e in enumerate(queue[start:end], start=start):
+                prefix = "▶️" if i == 0 else f"`{i+1}.`"
+                lines.append(f"{prefix} **{e['title']}** by {e['artist']} — {format_duration(e['duration'])}")
+
+            loop_status = ""
+            if is_looping_song(ctx.guild.id):
+                loop_status = " 🔂"
+            elif is_looping_queue(ctx.guild.id):
+                loop_status = " 🔁"
+
+            embed = discord.Embed(
+                title       = f"🎵 Queue — {len(queue)} song(s){loop_status}",
+                description = "\n".join(lines),
+                color       = discord.Color.blurple()
+            )
+            embed.set_footer(text=f"Page {page + 1} of {total_pages}")
+            return embed
+
+        class QueueView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+                self.page = 0
+                self.update_buttons()
+
+            def update_buttons(self):
+                self.prev_btn.disabled = self.page == 0
+                self.next_btn.disabled = self.page >= total_pages - 1
+
+            @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+            async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user != ctx.author:
+                    await interaction.response.send_message("Only the person who ran the command can flip pages!", ephemeral=True)
+                    return
+                self.page -= 1
+                self.update_buttons()
+                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
+            @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+            async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user != ctx.author:
+                    await interaction.response.send_message("Only the person who ran the command can flip pages!", ephemeral=True)
+                    return
+                self.page += 1
+                self.update_buttons()
+                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                try:
+                    await self.message.edit(view=self)
+                except Exception:
+                    pass
+
+        view         = QueueView()
+        view.message = await ctx.send(embed=build_embed(0), view=view)
+
+    @bot.command(name="clearqueue", aliases=["cq"])
+    async def clearqueue(ctx):
+        queue = get_queue(ctx.guild.id)
+        if not queue:
+            embed = discord.Embed(description="📋 The queue is already empty!", color=discord.Color.greyple())
+            await ctx.send(embed=embed)
+            return
+        current = queue[0] if queue else None
+        queue.clear()
+        if current and ctx.voice_client and ctx.voice_client.is_playing():
+            queue.append(current)
+            embed = discord.Embed(description=f"🗑️ Queue cleared! Still playing: **{current['title']}**", color=discord.Color.blurple())
+        else:
+            embed = discord.Embed(description="🗑️ Queue cleared!", color=discord.Color.blurple())
+        await ctx.send(embed=embed)
+
+    @bot.command(name="loop", aliases=["l"])
+    async def loop(ctx, mode: str = None):
+        guild_id = ctx.guild.id
+
+        if mode is None:
+            song_on  = is_looping_song(guild_id)
+            queue_on = is_looping_queue(guild_id)
+            status   = "🔂 Song loop" if song_on else ("🔁 Queue loop" if queue_on else "➡️ No loop")
+            embed    = discord.Embed(
+                description = f"Current loop mode: **{status}**\nUse `t!loop song`, `t!loop queue`, or `t!loop off`.",
+                color       = discord.Color.blurple()
+            )
+            await ctx.send(embed=embed)
+            return
+
+        mode = mode.lower()
+        if mode == "song":
+            loop_song[guild_id]  = True
+            loop_queue[guild_id] = False
+            embed = discord.Embed(description="🔂 Song loop **ON** — current song will repeat.", color=discord.Color.blurple())
+        elif mode == "queue":
+            loop_song[guild_id]  = False
+            loop_queue[guild_id] = True
+            embed = discord.Embed(description="🔁 Queue loop **ON** — queue will repeat when finished.", color=discord.Color.blurple())
+        elif mode == "off":
+            loop_song[guild_id]  = False
+            loop_queue[guild_id] = False
+            embed = discord.Embed(description="➡️ Loop **OFF**.", color=discord.Color.greyple())
+        else:
+            embed = discord.Embed(description="⚠️ Invalid mode. Use `t!loop song`, `t!loop queue`, or `t!loop off`.", color=discord.Color.red())
+        await ctx.send(embed=embed)
+
+    @bot.command(name="shuffle", aliases=["sh"])
+    async def shuffle(ctx):
+        queue = get_queue(ctx.guild.id)
+        if len(queue) < 3:
+            embed = discord.Embed(description="⚠️ Need at least 3 songs in the queue to shuffle.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
+            return
+        current = queue[0]
+        rest    = queue[1:]
+        random.shuffle(rest)
+        queue.clear()
+        queue.append(current)
+        queue.extend(rest)
         embed = discord.Embed(
-            title       = f"🎵 Queue — {len(queue)} song(s)",
-            description = desc,
+            title       = "🔀 Queue Shuffled!",
+            description = f"**{len(rest)}** songs rearranged.\nCurrently playing: **{current['title']}**",
             color       = discord.Color.blurple()
         )
         await ctx.send(embed=embed)
@@ -379,42 +494,45 @@ def setup_music(bot: commands.Bot):
     async def stop(ctx):
         vc = ctx.voice_client
         if vc:
-            get_queue(ctx.guild.id).clear()
+            guild_id             = ctx.guild.id
+            get_queue(guild_id).clear()
+            loop_song[guild_id]  = False
+            loop_queue[guild_id] = False
             await vc.disconnect()
-            await ctx.send("⏹️ Stopped and disconnected. See ya! 👋")
+            embed = discord.Embed(description="⏹️ Stopped and disconnected. See ya! 👋", color=discord.Color.red())
+            await ctx.send(embed=embed)
         else:
-            await ctx.send("⚠️ I'm not in a voice channel.")
+            embed = discord.Embed(description="⚠️ I'm not in a voice channel.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
 
     @bot.command(name="volume", aliases=["vol"])
     async def volume(ctx, vol: int):
         vc = ctx.voice_client
         if not vc or not vc.source:
-            await ctx.send("⚠️ Nothing is playing right now.")
+            embed = discord.Embed(description="⚠️ Nothing is playing right now.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         if not 1 <= vol <= 100:
-            await ctx.send("⚠️ Volume must be between 1 and 100.")
+            embed = discord.Embed(description="⚠️ Volume must be between 1 and 100.", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         vc.source.volume = vol / 100
-        await ctx.send(f"🔊 Volume set to {vol}%")
+        embed = discord.Embed(description=f"🔊 Volume set to **{vol}%**", color=discord.Color.blurple())
+        await ctx.send(embed=embed)
 
-    @bot.command(name="nowplaying", aliases=["np"])
+    @bot.command(name="nowplaying", aliases=["np", "current", "playing"])
     async def nowplaying(ctx):
-        vc = ctx.voice_client
+        vc    = ctx.voice_client
         queue = get_queue(ctx.guild.id)
-        if not vc or not vc.is_playing() or not queue:
-            await ctx.send("⚠️ Nothing is playing right now.")
+        if not vc or (not vc.is_playing() and not vc.is_paused()) or not queue:
+            embed = discord.Embed(description="⚠️ Nothing is playing right now.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         entry = queue[0]
-        embed = discord.Embed(
-            title       = "🎵 Now Playing",
-            description = f"**{entry['title']}** by {entry['artist']}",
-            color       = discord.Color.green()
-        )
-        if entry["art"]:
-            embed.set_thumbnail(url=entry["art"])
-        if entry["album"]:
-            embed.add_field(name="Album",    value=entry["album"],                    inline=True)
-        embed.add_field(    name="Duration", value=format_duration(entry["duration"]), inline=True)
-        if entry["spotify"]:
-            embed.add_field(name="Spotify", value=f"[Open]({entry['spotify']})", inline=True)
+        embed = now_playing_embed(entry, ctx.guild.id)
+        if vc.is_paused():
+            embed.title = "⏸️ Currently Paused"
+        up_next = queue[1] if len(queue) > 1 else None
+        if up_next:
+            embed.add_field(name="Up Next", value=f"**{up_next['title']}** by {up_next['artist']}", inline=False)
         await ctx.send(embed=embed)
