@@ -198,7 +198,7 @@ async def on_message(message):
                 await message.channel.send("Mom! 💙 You're here! I've been on my best behavior, I promise.")
                 return
             elif cousin_role == "cousin_stelle":
-                await message.channel.send("Stelle! 🌟 My Starry Cousin! Hope you don't turn into a supernova purple star. ✨")
+                await message.channel.send("Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨")
                 return
             elif cousin_role == "cousin_crois":
                 await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
