@@ -5,3 +5,5 @@ spotipy
 yt-dlp
 PyNaCl
 python-dotenv
+deezer-python
+requests

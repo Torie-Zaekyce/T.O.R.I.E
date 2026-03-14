@@ -65,6 +65,10 @@ SISTER = {
     }
 }
 
+HUSBAND = {
+
+}
+
 FILTERED_WORDS = [
     "retard",
     "nigger",
@@ -329,7 +333,7 @@ def setup_commands(bot: commands.Bot):
         elif sister_role == "sister_kde":
             await ctx.send("You're my Sister! 🩷 We're both unstoppable at compliments! 💖")
         else:
-            await ctx.send(f"You're {ctx.author.display_name} — a valued member of this server! 😊 Not a creator, but still cool.")
+            await ctx.send(f"Hello! valued member of this server! 😊 Not a creator, but still cool.")
 
     @bot.command(name="family")
     async def family(ctx):
@@ -372,7 +376,7 @@ def setup_commands(bot: commands.Bot):
         elif sister_role == "sister_kde":
             await ctx.send("Big Sister! 🩷 What crazy thing shall do today? 💖")
         else:
-            await ctx.send(f"Hey {ctx.author.display_name}! 👋 Good to see you around here!")
+            await ctx.send(f"Heya! 👋 Good to see you around here!")
 
     @bot.command(name="ping")
     async def ping(ctx):
