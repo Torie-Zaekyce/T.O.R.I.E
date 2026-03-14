@@ -10,17 +10,17 @@ from dotenv import load_dotenv
 import pytz
 import random
 import os
- 
+
 load_dotenv()
- 
+
 # T.O.R.I.E. — Discord Bot
- 
+
 DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
 GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_FALLBACK      = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
- 
+
 TIMEZONE           = pytz.timezone("Asia/Manila")
 GREET_HOUR         = 7
 LUNCH_HOUR         = 12
@@ -127,12 +127,12 @@ async def scheduled_announcements():
     now = datetime.now(TIMEZONE)
     if now.minute not in (0, 30):
         return
- 
+
     channel = bot.get_channel(GENERAL_CHANNEL)
     if not channel:
         print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
         return
- 
+
     if now.hour == GREET_HOUR and now.minute == 0:
         await channel.send(random.choice(MORNING_GREETINGS))
         print(f"✅ Morning greeting sent to #{channel.name}")
@@ -154,7 +154,7 @@ async def on_ready():
     print(f"   Fallback Model : {GROQ_FALLBACK}")
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
     print(f"   Timezone       : Philippines (PHT)")
-    print(f"   Schedules      : 7AM morning | 12PM lunch | 7PM evening → channel ID {GENERAL_CHANNEL}")
+    print(f"   Schedules      : 7AM morning | 12PM lunch | 7:30PM dinner | 7PM evening → channel ID {GENERAL_CHANNEL}")
     scheduled_announcements.start()
 
 
@@ -211,8 +211,9 @@ async def on_message(message):
                 return
             elif sister_role == "sister_abby":
                 await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
+                return
             elif sister_role == "sister_kde":
-                await message.channel.send("Kde! 🩷 What crazy thing shall do today? 💖")
+                await message.channel.send("Kde! 🩷 What crazy thing shall we do today? 💖")
                 return
 
         # Sticker
@@ -254,7 +255,7 @@ async def on_message(message):
             await message.channel.send("Hey! You mentioned me — what do you need? 😊")
             return
 
-        # Text — inject family context
+        # Text — inject family context + mentioned users
         async with message.channel.typing():
             try:
                 parent_role = get_parent_role(message.author)
@@ -280,6 +281,19 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Big Sister, Kde. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 else:
                     contexted_msg = clean_msg
+
+                # Inject mentioned users so T.O.R.I.E. can ping them in replies
+                mentioned = [u for u in message.mentions if u != bot.user]
+                if mentioned:
+                    mention_info = ", ".join(
+                        f"{u.display_name} (mention them as {u.mention})"
+                        for u in mentioned
+                    )
+                    contexted_msg = (
+                        f"[Note: The following users were mentioned in this message: {mention_info}. "
+                        f"You may use their mention format directly in your reply if needed.]\n"
+                        f"{contexted_msg}"
+                    )
 
                 reply = torie.generate_response(contexted_msg)
             except Exception as e:
