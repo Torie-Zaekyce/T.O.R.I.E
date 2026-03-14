@@ -296,6 +296,10 @@ async def on_message(message):
                     )
 
                 reply = torie.generate_response(contexted_msg)
+
+                # Hard block — strip @everyone and @here no matter what the AI outputs
+                reply = reply.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+
             except Exception as e:
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
