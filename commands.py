@@ -113,8 +113,8 @@ def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
     today = (now.month, now.day)
     return [
-        {"name": name, **data}
-        for name, data in BIRTHDAYS.items()
+        {"name": data.get("name", key), **data}
+        for key, data in BIRTHDAYS.items()
         if (data["month"], data["day"]) == today
     ]
 
@@ -215,7 +215,7 @@ def setup_commands(bot: commands.Bot):
             value  = (
                 "`t!birthday add <name> <MM-DD>` — Add a birthday *(parents only)*\n"
                 "`t!birthday remove <name>` — Remove a birthday *(parents only)*\n"
-                "`t!birthday list` — See all saved birthdays\n"
+                "`t!birthday list` — See all registered birthdays\n"
                 "`t!birthday today` — Check today's birthdays"
             ),
             inline = False
@@ -327,75 +327,74 @@ def setup_commands(bot: commands.Bot):
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
         embed = discord.Embed(
-            description = "Usage: `t!birthday add <name> <MM-DD>` | `t!birthday remove <name>` | `t!birthday list` | `t!birthday today`",
+            description = "Usage: `t!birthday add <MM-DD>` | `t!birthday remove` | `t!birthday list` | `t!birthday today`",
             color       = discord.Color.from_rgb(255, 182, 193)
         )
         await ctx.send(embed=embed)
 
     @birthday_group.command(name="add")
-    async def birthday_add(ctx, name: str, date: str):
-        if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can add birthdays. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
-            return
+    async def birthday_add(ctx, date: str):
         try:
             parsed = datetime.strptime(date, "%m-%d")
         except ValueError:
             embed = discord.Embed(
-                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add Stelle 03-15`",
+                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`",
                 color       = discord.Color.orange()
             )
             await ctx.send(embed=embed)
             return
 
-        user_id = None
-        if ctx.message.mentions:
-            user_id = ctx.message.mentions[0].id
-            name    = ctx.message.mentions[0].display_name
-
-        BIRTHDAYS[name] = {"month": parsed.month, "day": parsed.day, "user_id": user_id}
+        BIRTHDAYS[str(ctx.author.id)] = {
+            "month":   parsed.month,
+            "day":     parsed.day,
+            "user_id": ctx.author.id,
+            "name":    ctx.author.display_name,
+        }
         embed = discord.Embed(
-            title       = "🎂 Birthday Added!",
-            description = f"**{name}'s** birthday is set to **{parsed.strftime('%B %d')}**.\nI'll celebrate when the day comes! 🎉",
+            title       = "🎂 Birthday Registered!",
+            description = f"Got it, {ctx.author.mention}! Your birthday is set to **{parsed.strftime('%B %d')}**.\nI\'ll make sure to celebrate you on your special day! 🎉",
             color       = discord.Color.from_rgb(255, 182, 193)
         )
         embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
         await ctx.send(embed=embed)
 
     @birthday_group.command(name="remove")
-    async def birthday_remove(ctx, *, name: str):
-        if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can remove birthdays. 😏", color=discord.Color.red())
+    async def birthday_remove(ctx):
+        key = str(ctx.author.id)
+        if key not in BIRTHDAYS:
+            embed = discord.Embed(
+                description = "⚠️ You don\'t have a birthday registered! Use `t!birthday add <MM-DD>` to add one.",
+                color       = discord.Color.orange()
+            )
             await ctx.send(embed=embed)
             return
-        if name not in BIRTHDAYS:
-            embed = discord.Embed(description=f"⚠️ No birthday found for **{name}**.", color=discord.Color.orange())
-            await ctx.send(embed=embed)
-            return
-        del BIRTHDAYS[name]
-        embed = discord.Embed(description=f"✅ Removed **{name}'s** birthday from the list.", color=discord.Color.green())
+        del BIRTHDAYS[key]
+        embed = discord.Embed(
+            description = f"✅ Removed your birthday from the list, {ctx.author.mention}.",
+            color       = discord.Color.green()
+        )
         await ctx.send(embed=embed)
 
     @birthday_group.command(name="list")
     async def birthday_list(ctx):
         if not BIRTHDAYS:
             embed = discord.Embed(
-                description = "📋 No birthdays saved yet! Use `t!birthday add <name> <MM-DD>` to add one.",
+                description = "📋 No birthdays saved yet! Use `t!birthday add <MM-DD>` to register yours.",
                 color       = discord.Color.greyple()
             )
             await ctx.send(embed=embed)
             return
-        lines = []
-        for name, data in sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"])):
+        lines_out = []
+        for key, data in sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"])):
             date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
-            mention  = f" <@{data['user_id']}>" if data.get("user_id") else ""
-            lines.append(f"🎂 **{name}**{mention} — {date_str}")
+            mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
+            lines_out.append(f"🎂 {mention} — {date_str}")
         embed = discord.Embed(
             title       = "🎂 Birthday List",
-            description = "\n".join(lines),
+            description = "\n".join(lines_out),
             color       = discord.Color.from_rgb(255, 182, 193)
         )
-        embed.set_footer(text=f"{len(BIRTHDAYS)} birthday(s) saved")
+        embed.set_footer(text=f"{len(BIRTHDAYS)} birthday(s) registered")
         await ctx.send(embed=embed)
 
     @birthday_group.command(name="today")
@@ -403,16 +402,16 @@ def setup_commands(bot: commands.Bot):
         todays = get_todays_birthdays()
         if not todays:
             embed = discord.Embed(
-                description = "📋 No birthdays today! Everyone's safe from the birthday song. 😄",
+                description = "📋 No birthdays today! Everyone\'s safe from the birthday song. 😄",
                 color       = discord.Color.greyple()
             )
             await ctx.send(embed=embed)
             return
         for b in todays:
-            mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
+            mention = f"<@{b['user_id']}>" if b.get("user_id") else b.get("name", "Someone")
             embed = discord.Embed(
                 title       = "🎂 Happy Birthday!",
-                description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
+                description = f"Today is {mention}\'s birthday! 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
                 color       = discord.Color.gold()
             )
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
