@@ -28,6 +28,7 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
+BIRTHDAY_CHANNEL   = 1242875666265800806
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -149,16 +150,21 @@ async def scheduled_announcements():
     # Birthday check — runs at midnight PHT
     if now.hour == 0 and now.minute == 0:
         birthdays = get_todays_birthdays()
-        for b in birthdays:
-            mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
-            embed = discord.Embed(
-                title       = "🎂 Happy Birthday!",
-                description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
-                color       = discord.Color.gold()
-            )
-            embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
-            await channel.send(embed=embed)
-            print(f"✅ Birthday announcement sent for {b['name']}")
+        if birthdays:
+            bday_channel = bot.get_channel(BIRTHDAY_CHANNEL)
+            if not bday_channel:
+                print(f"❌ Could not find birthday channel with ID {BIRTHDAY_CHANNEL}")
+            else:
+                for b in birthdays:
+                    mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
+                    embed = discord.Embed(
+                        title       = "🎂 Happy Birthday!",
+                        description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
+                        color       = discord.Color.gold()
+                    )
+                    embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
+                    await bday_channel.send(embed=embed)
+                    print(f"✅ Birthday announcement sent for {b['name']}")
 
 
 @bot.event
@@ -169,6 +175,7 @@ async def on_ready():
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
     print(f"   Timezone       : Philippines (PHT)")
     print(f"   Schedules      : 7AM morning | 12PM lunch | 7:30PM dinner | 7PM evening → channel ID {GENERAL_CHANNEL}")
+    print(f"   Birthday ch.   : channel ID {BIRTHDAY_CHANNEL}")
     scheduled_announcements.start()
 
 
