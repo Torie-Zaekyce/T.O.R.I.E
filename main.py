@@ -151,10 +151,13 @@ async def scheduled_announcements():
         birthdays = get_todays_birthdays()
         for b in birthdays:
             mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
-            await channel.send(
-                f"🎂🎉 Happy Birthday **{b['name']}**!{mention} "
-                f"Wishing you an amazing day filled with joy! 🎈💙"
+            embed = discord.Embed(
+                title       = "🎂 Happy Birthday!",
+                description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
+                color       = discord.Color.gold()
             )
+            embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
+            await channel.send(embed=embed)
             print(f"✅ Birthday announcement sent for {b['name']}")
 
 

@@ -66,8 +66,8 @@ SISTER = {
     }
 }
 
-HUSBAND = {}
-FRIENDS = {}
+HUSBAND  = {}
+FRIENDS  = {}
 
 FILTERED_WORDS = [
     "retard",
@@ -77,8 +77,6 @@ FILTERED_WORDS = [
     "negra",
 ]
 
-# ---- Birthday store ----
-# Format: { "Name": {"month": int, "day": int, "user_id": int | None} }
 BIRTHDAYS: dict[str, dict] = {}
 
 NORMALIZER = str.maketrans({
@@ -112,94 +110,62 @@ def contains_filtered_word(content: str) -> str | None:
 
 
 def get_todays_birthdays() -> list[dict]:
-    now    = datetime.utcnow()
-    today  = (now.month, now.day)
-    result = []
-    for name, data in BIRTHDAYS.items():
-        if (data["month"], data["day"]) == today:
-            result.append({"name": name, **data})
-    return result
+    now   = datetime.utcnow()
+    today = (now.month, now.day)
+    return [
+        {"name": name, **data}
+        for name, data in BIRTHDAYS.items()
+        if (data["month"], data["day"]) == today
+    ]
 
 
 # ---- Family check helpers ----
 
-def is_dad(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == PARENTS["dad"]["id"] or
-        str(user.name).lower() == PARENTS["dad"]["username"].lower()
-    )
+def is_dad(user):
+    return user.id == PARENTS["dad"]["id"] or str(user.name).lower() == PARENTS["dad"]["username"].lower()
 
-def is_mom(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == PARENTS["mom"]["id"] or
-        str(user.name).lower() == PARENTS["mom"]["username"].lower()
-    )
+def is_mom(user):
+    return user.id == PARENTS["mom"]["id"] or str(user.name).lower() == PARENTS["mom"]["username"].lower()
 
-def is_cousin_stelle(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == COUSIN["cousin_stelle"]["id"] or
-        str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
-    )
+def is_cousin_stelle(user):
+    return user.id == COUSIN["cousin_stelle"]["id"] or str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
 
-def is_cousin_crois(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == COUSIN["cousin_crois"]["id"] or
-        str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
-    )
+def is_cousin_crois(user):
+    return user.id == COUSIN["cousin_crois"]["id"] or str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
 
-def is_uncle_caco(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == UNCLE["uncle_caco"]["id"] or
-        str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
-    )
+def is_uncle_caco(user):
+    return user.id == UNCLE["uncle_caco"]["id"] or str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
 
-def is_uncle_vari(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == UNCLE["uncle_vari"]["id"] or
-        str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
-    )
+def is_uncle_vari(user):
+    return user.id == UNCLE["uncle_vari"]["id"] or str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
 
-def is_sister_abby(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == SISTER["sister_abby"]["id"] or
-        str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
-    )
+def is_sister_abby(user):
+    return user.id == SISTER["sister_abby"]["id"] or str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
 
-def is_sister_kde(user: discord.User | discord.Member) -> bool:
-    return (
-        user.id == SISTER["sister_kde"]["id"] or
-        str(user.name).lower() == SISTER["sister_kde"]["username"].lower()
-    )
+def is_sister_kde(user):
+    return user.id == SISTER["sister_kde"]["id"] or str(user.name).lower() == SISTER["sister_kde"]["username"].lower()
 
 
 # ---- Role getters ----
 
-def get_parent_role(user: discord.User | discord.Member) -> str | None:
-    if is_dad(user):
-        return "dad"
-    if is_mom(user):
-        return "mom"
+def get_parent_role(user) -> str | None:
+    if is_dad(user):  return "dad"
+    if is_mom(user):  return "mom"
     return None
 
-def get_cousin_role(user: discord.User | discord.Member) -> str | None:
-    if is_cousin_stelle(user):
-        return "cousin_stelle"
-    if is_cousin_crois(user):
-        return "cousin_crois"
+def get_cousin_role(user) -> str | None:
+    if is_cousin_stelle(user): return "cousin_stelle"
+    if is_cousin_crois(user):  return "cousin_crois"
     return None
 
-def get_uncle_role(user: discord.User | discord.Member) -> str | None:
-    if is_uncle_caco(user):
-        return "uncle_caco"
-    if is_uncle_vari(user):
-        return "uncle_vari"
+def get_uncle_role(user) -> str | None:
+    if is_uncle_caco(user): return "uncle_caco"
+    if is_uncle_vari(user): return "uncle_vari"
     return None
 
-def get_sister_role(user: discord.User | discord.Member) -> str | None:
-    if is_sister_abby(user):
-        return "sister_abby"
-    if is_sister_kde(user):
-        return "sister_kde"
+def get_sister_role(user) -> str | None:
+    if is_sister_abby(user): return "sister_abby"
+    if is_sister_kde(user):  return "sister_kde"
     return None
 
 
@@ -289,40 +255,52 @@ def setup_commands(bot: commands.Bot):
 
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
-        await ctx.send("Usage: `t!filter add <word>` | `t!filter remove <word>` | `t!filter list` | `t!filter clear`")
+        embed = discord.Embed(
+            description = "Usage: `t!filter add <word>` | `t!filter remove <word>` | `t!filter list` | `t!filter clear`",
+            color       = discord.Color.red()
+        )
+        await ctx.send(embed=embed)
 
     @filter_group.command(name="add")
     async def filter_add(ctx, *, word: str):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can manage the filter. Nice try though. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         word = word.lower().strip()
         if word in [w.lower() for w in FILTERED_WORDS]:
-            await ctx.send(f"⚠️ `{word}` is already in the filter list.")
+            embed = discord.Embed(description=f"⚠️ `{word}` is already in the filter list.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         FILTERED_WORDS.append(word)
-        await ctx.send(f"✅ Added `{word}` to the filter list. I'll keep an eye out. 👀")
+        embed = discord.Embed(description=f"✅ Added `{word}` to the filter list. I'll keep an eye out. 👀", color=discord.Color.green())
+        await ctx.send(embed=embed)
 
     @filter_group.command(name="remove")
     async def filter_remove(ctx, *, word: str):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can manage the filter. Nice try though. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         word = word.lower().strip()
         matching = [w for w in FILTERED_WORDS if w.lower() == word]
         if not matching:
-            await ctx.send(f"⚠️ `{word}` isn't in the filter list.")
+            embed = discord.Embed(description=f"⚠️ `{word}` isn't in the filter list.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         FILTERED_WORDS.remove(matching[0])
-        await ctx.send(f"✅ Removed `{word}` from the filter list.")
+        embed = discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green())
+        await ctx.send(embed=embed)
 
     @filter_group.command(name="list")
     async def filter_list(ctx):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can view the filter list. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can view the filter list. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         if not FILTERED_WORDS:
-            await ctx.send("📋 The filter list is empty — no words are being blocked right now.")
+            embed = discord.Embed(description="📋 The filter list is empty — no words are being blocked right now.", color=discord.Color.greyple())
+            await ctx.send(embed=embed)
             return
         word_list = "\n".join([f"• `{w}`" for w in FILTERED_WORDS])
         embed = discord.Embed(
@@ -336,57 +314,76 @@ def setup_commands(bot: commands.Bot):
     @filter_group.command(name="clear")
     async def filter_clear(ctx):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can clear the filter list. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can clear the filter list. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         count = len(FILTERED_WORDS)
         FILTERED_WORDS.clear()
-        await ctx.send(f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹")
+        embed = discord.Embed(description=f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹", color=discord.Color.green())
+        await ctx.send(embed=embed)
 
     # ---- Birthday ----
 
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
-        await ctx.send("Usage: `t!birthday add <name> <MM-DD>` | `t!birthday remove <name>` | `t!birthday list` | `t!birthday today`")
+        embed = discord.Embed(
+            description = "Usage: `t!birthday add <name> <MM-DD>` | `t!birthday remove <name>` | `t!birthday list` | `t!birthday today`",
+            color       = discord.Color.from_rgb(255, 182, 193)
+        )
+        await ctx.send(embed=embed)
 
     @birthday_group.command(name="add")
     async def birthday_add(ctx, name: str, date: str):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can add birthdays. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can add birthdays. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         try:
             parsed = datetime.strptime(date, "%m-%d")
         except ValueError:
-            await ctx.send("⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add Stelle 03-15`")
+            embed = discord.Embed(
+                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add Stelle 03-15`",
+                color       = discord.Color.orange()
+            )
+            await ctx.send(embed=embed)
             return
 
-        # Check if the mention is a Discord user
         user_id = None
         if ctx.message.mentions:
             user_id = ctx.message.mentions[0].id
             name    = ctx.message.mentions[0].display_name
 
-        BIRTHDAYS[name] = {
-            "month":   parsed.month,
-            "day":     parsed.day,
-            "user_id": user_id,
-        }
-        await ctx.send(f"🎂 Added **{name}'s** birthday — {parsed.strftime('%B %d')}! I'll remember to celebrate. 🎉")
+        BIRTHDAYS[name] = {"month": parsed.month, "day": parsed.day, "user_id": user_id}
+        embed = discord.Embed(
+            title       = "🎂 Birthday Added!",
+            description = f"**{name}'s** birthday is set to **{parsed.strftime('%B %d')}**.\nI'll celebrate when the day comes! 🎉",
+            color       = discord.Color.from_rgb(255, 182, 193)
+        )
+        embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
+        await ctx.send(embed=embed)
 
     @birthday_group.command(name="remove")
     async def birthday_remove(ctx, *, name: str):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can remove birthdays. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can remove birthdays. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         if name not in BIRTHDAYS:
-            await ctx.send(f"⚠️ No birthday found for **{name}**.")
+            embed = discord.Embed(description=f"⚠️ No birthday found for **{name}**.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         del BIRTHDAYS[name]
-        await ctx.send(f"✅ Removed **{name}'s** birthday from the list.")
+        embed = discord.Embed(description=f"✅ Removed **{name}'s** birthday from the list.", color=discord.Color.green())
+        await ctx.send(embed=embed)
 
     @birthday_group.command(name="list")
     async def birthday_list(ctx):
         if not BIRTHDAYS:
-            await ctx.send("📋 No birthdays saved yet! Use `t!birthday add <name> <MM-DD>` to add one.")
+            embed = discord.Embed(
+                description = "📋 No birthdays saved yet! Use `t!birthday add <name> <MM-DD>` to add one.",
+                color       = discord.Color.greyple()
+            )
+            await ctx.send(embed=embed)
             return
         lines = []
         for name, data in sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"])):
@@ -405,51 +402,74 @@ def setup_commands(bot: commands.Bot):
     async def birthday_today(ctx):
         todays = get_todays_birthdays()
         if not todays:
-            await ctx.send("📋 No birthdays today! Everyone's safe from the birthday song. 😄")
+            embed = discord.Embed(
+                description = "📋 No birthdays today! Everyone's safe from the birthday song. 😄",
+                color       = discord.Color.greyple()
+            )
+            await ctx.send(embed=embed)
             return
-        lines = []
         for b in todays:
             mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
-            lines.append(f"🎂 **{b['name']}**{mention}")
-        embed = discord.Embed(
-            title       = "🎉 Today's Birthdays!",
-            description = "\n".join(lines),
-            color       = discord.Color.gold()
-        )
-        await ctx.send(embed=embed)
+            embed = discord.Embed(
+                title       = "🎂 Happy Birthday!",
+                description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
+                color       = discord.Color.gold()
+            )
+            embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
+            await ctx.send(embed=embed)
 
     # ---- Personality ----
 
     @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
     async def personality_group(ctx):
-        await ctx.send("Usage: `t!personality add <trait>` | `t!personality remove <number>` | `t!personality list` | `t!personality clear`")
+        embed = discord.Embed(
+            description = "Usage: `t!personality add <trait>` | `t!personality remove <number>` | `t!personality list` | `t!personality clear`",
+            color       = discord.Color.blurple()
+        )
+        await ctx.send(embed=embed)
 
     @personality_group.command(name="add")
     async def personality_add(ctx, *, trait: str):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can update my personality. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         from personality import CUSTOM_TRAITS
         CUSTOM_TRAITS.append(trait.strip())
-        await ctx.send(f"✅ New personality trait added: *\"{trait.strip()}\"* — I'll keep that in mind! 🧠")
+        embed = discord.Embed(
+            title       = "🧠 Personality Updated!",
+            description = f"New trait added: \"{trait.strip()}\"\nI'll keep that in mind! 🧠",
+            color       = discord.Color.blurple()
+        )
+        await ctx.send(embed=embed)
 
     @personality_group.command(name="remove")
     async def personality_remove(ctx, index: int):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can update my personality. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         from personality import CUSTOM_TRAITS
         if index < 1 or index > len(CUSTOM_TRAITS):
-            await ctx.send(f"⚠️ Invalid number. Use `t!personality list` to see the current traits.")
+            embed = discord.Embed(description="⚠️ Invalid number. Use `t!personality list` to see the current traits.", color=discord.Color.orange())
+            await ctx.send(embed=embed)
             return
         removed = CUSTOM_TRAITS.pop(index - 1)
-        await ctx.send(f"✅ Removed trait #{index}: *\"{removed}\"*")
+        embed = discord.Embed(
+            description = f"✅ Removed trait #{index}: \"{removed}\"",
+            color       = discord.Color.green()
+        )
+        await ctx.send(embed=embed)
 
     @personality_group.command(name="list")
     async def personality_list(ctx):
         from personality import CUSTOM_TRAITS
         if not CUSTOM_TRAITS:
-            await ctx.send("📋 No custom personality traits added yet. Use `t!personality add <trait>` to add one.")
+            embed = discord.Embed(
+                description = "📋 No custom personality traits added yet. Use `t!personality add <trait>` to add one.",
+                color       = discord.Color.greyple()
+            )
+            await ctx.send(embed=embed)
             return
         lines = [f"`{i+1}.` {trait}" for i, trait in enumerate(CUSTOM_TRAITS)]
         embed = discord.Embed(
@@ -463,12 +483,17 @@ def setup_commands(bot: commands.Bot):
     @personality_group.command(name="clear")
     async def personality_clear(ctx):
         if not get_parent_role(ctx.author):
-            await ctx.send("⛔ Only my parents can clear my personality traits. 😏")
+            embed = discord.Embed(description="⛔ Only my parents can clear my personality traits. 😏", color=discord.Color.red())
+            await ctx.send(embed=embed)
             return
         from personality import CUSTOM_TRAITS
         count = len(CUSTOM_TRAITS)
         CUSTOM_TRAITS.clear()
-        await ctx.send(f"✅ Cleared all {count} custom trait(s). Back to default me! 😊")
+        embed = discord.Embed(
+            description = f"✅ Cleared all {count} custom trait(s). Back to default me! 😊",
+            color       = discord.Color.green()
+        )
+        await ctx.send(embed=embed)
 
     # ---- General ----
 
@@ -538,9 +563,13 @@ def setup_commands(bot: commands.Bot):
         elif sister_role == "sister_kde":
             await ctx.send("Big Sister! 🩷 What crazy thing shall do today? 💖")
         else:
-            await ctx.send(f"Heya! 👋 Good to see you around here!")
+            await ctx.send("Heya! 👋 Good to see you around here!")
 
     @bot.command(name="ping")
     async def ping(ctx):
         latency = round(bot.latency * 1000)
-        await ctx.send(f"Pong! 🏓 Latency: {latency}ms — {'sharp as ever!' if latency < 100 else 'a little slow today 😴'}")
+        embed = discord.Embed(
+            description = f"🏓 Pong! Latency: **{latency}ms** — {'sharp as ever! ⚡' if latency < 100 else 'a little slow today 😴'}",
+            color       = discord.Color.green() if latency < 100 else discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
