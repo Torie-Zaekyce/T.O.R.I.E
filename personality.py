@@ -1,8 +1,13 @@
 # personality.py — T.O.R.I.E.'s Personality Base Class
 
+# Custom traits added at runtime via t!personality add
+# Parents can add/remove these without restarting the bot
+CUSTOM_TRAITS: list[str] = []
+
+
 class ToriePersonality:
 
-    SYSTEM_PROMPT = """You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
+    SYSTEM_PROMPT_BASE = """You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
 
 RESPONSE LENGTH — MOST IMPORTANT RULE:
 - Keep ALL replies to 1-2 sentences maximum
@@ -92,6 +97,16 @@ ALWAYS: Be a real friend, not a generic advice bot."""
         "i need help with", "can you help me with", "struggling with",
         "having trouble", "having a hard time", "going through"
     ]
+
+    @property
+    def SYSTEM_PROMPT(self) -> str:
+        if not CUSTOM_TRAITS:
+            return self.SYSTEM_PROMPT_BASE
+        traits_block = "\n".join(f"- {trait}" for trait in CUSTOM_TRAITS)
+        return (
+            self.SYSTEM_PROMPT_BASE.rstrip() +
+            f"\n\nADDITIONAL PERSONALITY TRAITS (added by parents):\n{traits_block}"
+        )
 
     def is_advice_request(self, message: str) -> bool:
         lowered = message.lower()

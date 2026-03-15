@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, contains_filtered_word
+from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, contains_filtered_word, get_todays_birthdays
 from music import setup_music
 from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS
 from datetime import datetime
@@ -145,6 +145,17 @@ async def scheduled_announcements():
     elif now.hour == EVENING_HOUR and now.minute == 0:
         await channel.send(random.choice(EVENING_GREETINGS))
         print(f"✅ Evening greeting sent to #{channel.name}")
+
+    # Birthday check — runs at midnight PHT
+    if now.hour == 0 and now.minute == 0:
+        birthdays = get_todays_birthdays()
+        for b in birthdays:
+            mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
+            await channel.send(
+                f"🎂🎉 Happy Birthday **{b['name']}**!{mention} "
+                f"Wishing you an amazing day filled with joy! 🎈💙"
+            )
+            print(f"✅ Birthday announcement sent for {b['name']}")
 
 
 @bot.event

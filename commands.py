@@ -2,6 +2,7 @@
 
 import discord
 import re
+from datetime import datetime
 from discord.ext import commands
 
 
@@ -65,9 +66,8 @@ SISTER = {
     }
 }
 
-HUSBAND = {
-
-}
+HUSBAND = {}
+FRIENDS = {}
 
 FILTERED_WORDS = [
     "retard",
@@ -76,6 +76,10 @@ FILTERED_WORDS = [
     "negro",
     "negra",
 ]
+
+# ---- Birthday store ----
+# Format: { "Name": {"month": int, "day": int, "user_id": int | None} }
+BIRTHDAYS: dict[str, dict] = {}
 
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
@@ -105,6 +109,16 @@ def contains_filtered_word(content: str) -> str | None:
         if normalize(word) in normalized:
             return word
     return None
+
+
+def get_todays_birthdays() -> list[dict]:
+    now    = datetime.utcnow()
+    today  = (now.month, now.day)
+    result = []
+    for name, data in BIRTHDAYS.items():
+        if (data["month"], data["day"]) == today:
+            result.append({"name": name, **data})
+    return result
 
 
 # ---- Family check helpers ----
@@ -150,6 +164,7 @@ def is_sister_abby(user: discord.User | discord.Member) -> bool:
         user.id == SISTER["sister_abby"]["id"] or
         str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
     )
+
 def is_sister_kde(user: discord.User | discord.Member) -> bool:
     return (
         user.id == SISTER["sister_kde"]["id"] or
@@ -230,6 +245,26 @@ def setup_commands(bot: commands.Bot):
             inline = False
         )
         embed.add_field(
+            name   = "🎂 Birthdays",
+            value  = (
+                "`t!birthday add <name> <MM-DD>` — Add a birthday *(parents only)*\n"
+                "`t!birthday remove <name>` — Remove a birthday *(parents only)*\n"
+                "`t!birthday list` — See all saved birthdays\n"
+                "`t!birthday today` — Check today's birthdays"
+            ),
+            inline = False
+        )
+        embed.add_field(
+            name   = "🧠 Personality",
+            value  = (
+                "`t!personality add <trait>` — Add a personality trait *(parents only)*\n"
+                "`t!personality remove <number>` — Remove a trait by number *(parents only)*\n"
+                "`t!personality list` — See all active custom traits\n"
+                "`t!personality clear` — Clear all custom traits *(parents only)*"
+            ),
+            inline = False
+        )
+        embed.add_field(
             name   = "🎵 Play your favorite music with me!",
             value  = (
                 "`t!play <song>` — Join voice and play a song\n"
@@ -243,8 +278,7 @@ def setup_commands(bot: commands.Bot):
                 "`t!loop off` — Turn off looping\n"
                 "`t!nowplaying` / `t!current` — See what's playing now\n"
                 "`t!volume <1-100>` — Set volume\n"
-                "`t!stop` — Stop and disconnect\n\n"
-                "⚠️ **Note:** Spotify is not available yet — YouTube only for now!"
+                "`t!stop` — Stop and disconnect"
             ),
             inline = False
         )
@@ -308,6 +342,134 @@ def setup_commands(bot: commands.Bot):
         FILTERED_WORDS.clear()
         await ctx.send(f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹")
 
+    # ---- Birthday ----
+
+    @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
+    async def birthday_group(ctx):
+        await ctx.send("Usage: `t!birthday add <name> <MM-DD>` | `t!birthday remove <name>` | `t!birthday list` | `t!birthday today`")
+
+    @birthday_group.command(name="add")
+    async def birthday_add(ctx, name: str, date: str):
+        if not get_parent_role(ctx.author):
+            await ctx.send("⛔ Only my parents can add birthdays. 😏")
+            return
+        try:
+            parsed = datetime.strptime(date, "%m-%d")
+        except ValueError:
+            await ctx.send("⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add Stelle 03-15`")
+            return
+
+        # Check if the mention is a Discord user
+        user_id = None
+        if ctx.message.mentions:
+            user_id = ctx.message.mentions[0].id
+            name    = ctx.message.mentions[0].display_name
+
+        BIRTHDAYS[name] = {
+            "month":   parsed.month,
+            "day":     parsed.day,
+            "user_id": user_id,
+        }
+        await ctx.send(f"🎂 Added **{name}'s** birthday — {parsed.strftime('%B %d')}! I'll remember to celebrate. 🎉")
+
+    @birthday_group.command(name="remove")
+    async def birthday_remove(ctx, *, name: str):
+        if not get_parent_role(ctx.author):
+            await ctx.send("⛔ Only my parents can remove birthdays. 😏")
+            return
+        if name not in BIRTHDAYS:
+            await ctx.send(f"⚠️ No birthday found for **{name}**.")
+            return
+        del BIRTHDAYS[name]
+        await ctx.send(f"✅ Removed **{name}'s** birthday from the list.")
+
+    @birthday_group.command(name="list")
+    async def birthday_list(ctx):
+        if not BIRTHDAYS:
+            await ctx.send("📋 No birthdays saved yet! Use `t!birthday add <name> <MM-DD>` to add one.")
+            return
+        lines = []
+        for name, data in sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"])):
+            date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
+            mention  = f" <@{data['user_id']}>" if data.get("user_id") else ""
+            lines.append(f"🎂 **{name}**{mention} — {date_str}")
+        embed = discord.Embed(
+            title       = "🎂 Birthday List",
+            description = "\n".join(lines),
+            color       = discord.Color.from_rgb(255, 182, 193)
+        )
+        embed.set_footer(text=f"{len(BIRTHDAYS)} birthday(s) saved")
+        await ctx.send(embed=embed)
+
+    @birthday_group.command(name="today")
+    async def birthday_today(ctx):
+        todays = get_todays_birthdays()
+        if not todays:
+            await ctx.send("📋 No birthdays today! Everyone's safe from the birthday song. 😄")
+            return
+        lines = []
+        for b in todays:
+            mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
+            lines.append(f"🎂 **{b['name']}**{mention}")
+        embed = discord.Embed(
+            title       = "🎉 Today's Birthdays!",
+            description = "\n".join(lines),
+            color       = discord.Color.gold()
+        )
+        await ctx.send(embed=embed)
+
+    # ---- Personality ----
+
+    @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
+    async def personality_group(ctx):
+        await ctx.send("Usage: `t!personality add <trait>` | `t!personality remove <number>` | `t!personality list` | `t!personality clear`")
+
+    @personality_group.command(name="add")
+    async def personality_add(ctx, *, trait: str):
+        if not get_parent_role(ctx.author):
+            await ctx.send("⛔ Only my parents can update my personality. 😏")
+            return
+        from personality import CUSTOM_TRAITS
+        CUSTOM_TRAITS.append(trait.strip())
+        await ctx.send(f"✅ New personality trait added: *\"{trait.strip()}\"* — I'll keep that in mind! 🧠")
+
+    @personality_group.command(name="remove")
+    async def personality_remove(ctx, index: int):
+        if not get_parent_role(ctx.author):
+            await ctx.send("⛔ Only my parents can update my personality. 😏")
+            return
+        from personality import CUSTOM_TRAITS
+        if index < 1 or index > len(CUSTOM_TRAITS):
+            await ctx.send(f"⚠️ Invalid number. Use `t!personality list` to see the current traits.")
+            return
+        removed = CUSTOM_TRAITS.pop(index - 1)
+        await ctx.send(f"✅ Removed trait #{index}: *\"{removed}\"*")
+
+    @personality_group.command(name="list")
+    async def personality_list(ctx):
+        from personality import CUSTOM_TRAITS
+        if not CUSTOM_TRAITS:
+            await ctx.send("📋 No custom personality traits added yet. Use `t!personality add <trait>` to add one.")
+            return
+        lines = [f"`{i+1}.` {trait}" for i, trait in enumerate(CUSTOM_TRAITS)]
+        embed = discord.Embed(
+            title       = "🧠 Custom Personality Traits",
+            description = "\n".join(lines),
+            color       = discord.Color.blurple()
+        )
+        embed.set_footer(text=f"{len(CUSTOM_TRAITS)} custom trait(s) active")
+        await ctx.send(embed=embed)
+
+    @personality_group.command(name="clear")
+    async def personality_clear(ctx):
+        if not get_parent_role(ctx.author):
+            await ctx.send("⛔ Only my parents can clear my personality traits. 😏")
+            return
+        from personality import CUSTOM_TRAITS
+        count = len(CUSTOM_TRAITS)
+        CUSTOM_TRAITS.clear()
+        await ctx.send(f"✅ Cleared all {count} custom trait(s). Back to default me! 😊")
+
     # ---- General ----
 
     @bot.command(name="whoami")
@@ -333,7 +495,7 @@ def setup_commands(bot: commands.Bot):
         elif sister_role == "sister_kde":
             await ctx.send("You're my Sister! 🩷 We're both unstoppable at compliments! 💖")
         else:
-            await ctx.send(f"Hello! valued member of this server! 😊 Not a creator, but still cool.")
+            await ctx.send("Hello! valued member of this server! 😊 Not a creator, but still cool.")
 
     @bot.command(name="family")
     async def family(ctx):
@@ -342,14 +504,14 @@ def setup_commands(bot: commands.Bot):
             description = "The people responsible for my existence. Blame them.",
             color       = discord.Color.blurple()
         )
-        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",       value="Creator. Built me from scratch. Questionable life choice.",     inline=False)
-        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",        value="Co-Creator. Helped shape who I am. The good parts are hers.",   inline=False)
-        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}", value="Starry Cousin. The one and only purple star.",              inline=False)
-        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",  value="Croissant Cousin. The one and only Kwaso.",                 inline=False)
-        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",  value="Goated Uncle. The one and only Cacolate.",                     inline=False)
-        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",  value="Chimera Uncle. The one and only Vari.",                        inline=False)
-        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}", value="Big Sister. The most funny AI Sister.",                      inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}", value="Big Sister. The most sweetest Sister.",                      inline=False)
+        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",            value="Creator. Built me from scratch. Questionable life choice.",     inline=False)
+        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",             value="Co-Creator. Helped shape who I am. The good parts are hers.",   inline=False)
+        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}", value="Starry Cousin. The one and only purple star.",                   inline=False)
+        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",  value="Croissant Cousin. The one and only Kwaso.",                      inline=False)
+        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",      value="Goated Uncle. The one and only Cacolate.",                       inline=False)
+        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",      value="Chimera Uncle. The one and only Vari.",                          inline=False)
+        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",   value="Big Sister. The most funny AI Sister.",                          inline=False)
+        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",    value="Big Sister. The most sweetest Sister.",                          inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
