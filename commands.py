@@ -44,7 +44,7 @@ COUSIN = {
     },
     "cousin_mimi": {
         "username": "Mimi",
-        "id":       1076407798809776138,
+        "id":       1196640036465148035,
         "title":    "Serious Cousin",
         "role":     "Sekai"
     }
@@ -113,7 +113,7 @@ def get_birthday_col():
 
 def load_birthdays() -> dict:
     col = get_birthday_col()
-    if not col:
+    if col is None:
         return {}
     try:
         return {doc["_id"]: {k: v for k, v in doc.items() if k != "_id"} for doc in col.find()}
@@ -123,7 +123,7 @@ def load_birthdays() -> dict:
 
 def save_birthday(user_id: str, data: dict):
     col = get_birthday_col()
-    if not col:
+    if col is None:
         return
     try:
         col.replace_one({"_id": user_id}, {"_id": user_id, **data}, upsert=True)
@@ -132,7 +132,7 @@ def save_birthday(user_id: str, data: dict):
 
 def delete_birthday(user_id: str):
     col = get_birthday_col()
-    if not col:
+    if col is None:
         return
     try:
         col.delete_one({"_id": user_id})
@@ -199,6 +199,7 @@ def is_cousin_hyu(user):
     return user.id == COUSIN["cousin_hyu"]["id"] or str(user.name).lower() == COUSIN["cousin_hyu"]["username"].lower()
 
 def is_cousin_mimi(user):
+    # ✅ Fixed — was incorrectly checking cousin_hyu's username
     return user.id == COUSIN["cousin_mimi"]["id"] or str(user.name).lower() == COUSIN["cousin_mimi"]["username"].lower()
 
 def is_uncle_caco(user):
