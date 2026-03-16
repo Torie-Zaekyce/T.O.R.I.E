@@ -2,6 +2,8 @@
 
 import discord
 import re
+import json
+import os
 from datetime import datetime
 from discord.ext import commands
 
@@ -77,7 +79,27 @@ FILTERED_WORDS = [
     "negra",
 ]
 
-BIRTHDAYS: dict[str, dict] = {}
+# ---- Persistent birthday store ----
+
+BIRTHDAYS_FILE = "birthdays.json"
+
+def _load_birthdays() -> dict:
+    if os.path.exists(BIRTHDAYS_FILE):
+        try:
+            with open(BIRTHDAYS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Failed to load birthdays.json: {e}")
+    return {}
+
+def _save_birthdays():
+    try:
+        with open(BIRTHDAYS_FILE, "w", encoding="utf-8") as f:
+            json.dump(BIRTHDAYS, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"⚠️ Failed to save birthdays.json: {e}")
+
+BIRTHDAYS: dict[str, dict] = _load_birthdays()
 
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
@@ -371,6 +393,7 @@ def setup_commands(bot: commands.Bot):
             "user_id": ctx.author.id,
             "name":    ctx.author.display_name,
         }
+        _save_birthdays()
         embed = discord.Embed(
             title       = "🎂 Birthday Registered!",
             description = (
@@ -394,6 +417,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=embed)
             return
         del BIRTHDAYS[key]
+        _save_birthdays()
         embed = discord.Embed(
             description = f"✅ Removed your birthday from the list, {ctx.author.mention}.",
             color       = discord.Color.green()
