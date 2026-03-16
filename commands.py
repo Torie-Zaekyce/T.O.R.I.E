@@ -44,7 +44,7 @@ COUSIN = {
     },
     "cousin_mimi": {
         "username": "Mimi",
-        "id":       1196640036465148035,
+        "id":       1076407798809776138,
         "title":    "Serious Cousin",
         "role":     "Sekai"
     }
