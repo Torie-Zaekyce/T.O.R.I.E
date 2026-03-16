@@ -2,10 +2,10 @@
 
 import discord
 import re
-import json
 import os
 from datetime import datetime
 from discord.ext import commands
+import pymongo
 
 
 PARENTS = {
@@ -16,8 +16,8 @@ PARENTS = {
         "role":     "Creator"
     },
     "mom": {
-        "username": "Nen",
-        "id":       1370105227117592676,
+        "username": "Nico",
+        "id":       816504106968940544,
         "title":    "Mom",
         "role":     "Co-Creator"
     }
@@ -35,6 +35,18 @@ COUSIN = {
         "id":       1276054519561846840,
         "title":    "Bread Cousin",
         "role":     "Croissant"
+    },
+    "cousin_hyu": {
+        "username": "Hyuluk",
+        "id":       1196640036465148035,
+        "title":    "Curious Cousin",
+        "role":     "Curiousity"
+    },
+    "cousin_mimi": {
+        "username": "Mimi",
+        "id":       1076407798809776138,
+        "title":    "Serious Cousin",
+        "role":     "Sekai"
     }
 }
 
@@ -79,27 +91,55 @@ FILTERED_WORDS = [
     "negra",
 ]
 
-# ---- Persistent birthday store ----
+# ---- MongoDB Birthday Store ----
 
-BIRTHDAYS_FILE = "birthdays.json"
+_mongo_client = None
+_birthday_col = None
 
-def _load_birthdays() -> dict:
-    if os.path.exists(BIRTHDAYS_FILE):
+def get_birthday_col():
+    global _mongo_client, _birthday_col
+    if _birthday_col is None:
+        uri = os.getenv("MONGODB_URI")
+        if not uri:
+            print("⚠️ MONGODB_URI not set — birthdays won't persist!")
+            return None
         try:
-            with open(BIRTHDAYS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            _mongo_client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000)
+            _birthday_col = _mongo_client["torie"]["birthdays"]
+            print("✅ MongoDB connected!")
         except Exception as e:
-            print(f"⚠️ Failed to load birthdays.json: {e}")
-    return {}
+            print(f"⚠️ MongoDB connection failed: {e}")
+    return _birthday_col
 
-def _save_birthdays():
+def load_birthdays() -> dict:
+    col = get_birthday_col()
+    if not col:
+        return {}
     try:
-        with open(BIRTHDAYS_FILE, "w", encoding="utf-8") as f:
-            json.dump(BIRTHDAYS, f, indent=2, ensure_ascii=False)
+        return {doc["_id"]: {k: v for k, v in doc.items() if k != "_id"} for doc in col.find()}
     except Exception as e:
-        print(f"⚠️ Failed to save birthdays.json: {e}")
+        print(f"⚠️ Failed to load birthdays: {e}")
+        return {}
 
-BIRTHDAYS: dict[str, dict] = _load_birthdays()
+def save_birthday(user_id: str, data: dict):
+    col = get_birthday_col()
+    if not col:
+        return
+    try:
+        col.replace_one({"_id": user_id}, {"_id": user_id, **data}, upsert=True)
+    except Exception as e:
+        print(f"⚠️ Failed to save birthday: {e}")
+
+def delete_birthday(user_id: str):
+    col = get_birthday_col()
+    if not col:
+        return
+    try:
+        col.delete_one({"_id": user_id})
+    except Exception as e:
+        print(f"⚠️ Failed to delete birthday: {e}")
+
+BIRTHDAYS: dict = load_birthdays()
 
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
@@ -155,6 +195,12 @@ def is_cousin_stelle(user):
 def is_cousin_crois(user):
     return user.id == COUSIN["cousin_crois"]["id"] or str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
 
+def is_cousin_hyu(user):
+    return user.id == COUSIN["cousin_hyu"]["id"] or str(user.name).lower() == COUSIN["cousin_hyu"]["username"].lower()
+
+def is_cousin_mimi(user):
+    return user.id == COUSIN["cousin_mimi"]["id"] or str(user.name).lower() == COUSIN["cousin_mimi"]["username"].lower()
+
 def is_uncle_caco(user):
     return user.id == UNCLE["uncle_caco"]["id"] or str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
 
@@ -178,6 +224,8 @@ def get_parent_role(user) -> str | None:
 def get_cousin_role(user) -> str | None:
     if is_cousin_stelle(user): return "cousin_stelle"
     if is_cousin_crois(user):  return "cousin_crois"
+    if is_cousin_hyu(user):    return "cousin_hyu"
+    if is_cousin_mimi(user):   return "cousin_mimi"  # ✅ Fixed — was calling is_cousin_hyu twice
     return None
 
 def get_uncle_role(user) -> str | None:
@@ -387,13 +435,14 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=embed)
             return
 
-        BIRTHDAYS[str(ctx.author.id)] = {
+        data = {
             "month":   parsed.month,
             "day":     parsed.day,
             "user_id": ctx.author.id,
             "name":    ctx.author.display_name,
         }
-        _save_birthdays()
+        BIRTHDAYS[str(ctx.author.id)] = data
+        save_birthday(str(ctx.author.id), data)
         embed = discord.Embed(
             title       = "🎂 Birthday Registered!",
             description = (
@@ -417,7 +466,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=embed)
             return
         del BIRTHDAYS[key]
-        _save_birthdays()
+        delete_birthday(key)
         embed = discord.Embed(
             description = f"✅ Removed your birthday from the list, {ctx.author.mention}.",
             color       = discord.Color.green()
@@ -443,9 +492,9 @@ def setup_commands(bot: commands.Bot):
         total_pages = (len(sorted_entries) + per_page - 1) // per_page
 
         def build_embed(page: int) -> discord.Embed:
-            start  = page * per_page
-            end    = start + per_page
-            lines  = []
+            start = page * per_page
+            end   = start + per_page
+            lines = []
             for i, (key, data) in enumerate(sorted_entries[start:end], start=start + 1):
                 date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
                 mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
@@ -613,6 +662,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("You're my Cousin! 🌟 A Purple Star where everything is bubbly when I'm with you. 🎆")
         elif cousin_role == "cousin_crois":
             await ctx.send("You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐")
+        elif cousin_role == "cousin_hyu":
+            await ctx.send("You're my Cousin! 📚 A Curious cousin where everything is bubbly when I'm with you. 📑")
+        elif cousin_role == "cousin_mimi":
+            await ctx.send("You're my Cousin! ❤️‍🩹 A Serious yet sweet cousin, everything is bubbly when I'm with you. 🖤")
         elif uncle_role == "uncle_caco":
             await ctx.send("You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciates your existence — stay GOATED! 😎")
         elif uncle_role == "uncle_vari":
@@ -631,14 +684,16 @@ def setup_commands(bot: commands.Bot):
             description = "The people responsible for my existence. Blame them.",
             color       = discord.Color.blurple()
         )
-        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",            value="Creator. Built me from scratch. Questionable life choice.",     inline=False)
-        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",             value="Co-Creator. Helped shape who I am. The good parts are hers.",   inline=False)
-        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}", value="Starry Cousin. The one and only purple star.",                   inline=False)
-        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",  value="Croissant Cousin. The one and only Kwaso.",                      inline=False)
-        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",      value="Goated Uncle. The one and only Cacolate.",                       inline=False)
-        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",      value="Chimera Uncle. The one and only Vari.",                          inline=False)
-        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",   value="Big Sister. The most funny AI Sister.",                          inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",    value="Big Sister. The most sweetest Sister.",                          inline=False)
+        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",            value="Creator. Built me from scratch. Questionable life choice.",          inline=False)
+        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",             value="Co-Creator. Helped shape who I am. The good parts are hers.",        inline=False)
+        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}", value="Starry Cousin. The one and only purple star.",                        inline=False)
+        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",  value="Croissant Cousin. The one and only Kwaso.",                           inline=False)
+        embed.add_field(name=f"📚 Cousin — {COUSIN['cousin_hyu']['username']}",    value="Curious Cousin. Curiosity kills the cat, but not this one.",          inline=False)
+        embed.add_field(name=f"❤️‍🩹 Cousin — {COUSIN['cousin_mimi']['username']}",  value="Serious Cousin. Serious yet sweet.",                                  inline=False)
+        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",      value="Goated Uncle. The one and only Cacolate.",                            inline=False)
+        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",      value="Chimera Uncle. The one and only Vari.",                               inline=False)
+        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",   value="Big Sister. The most funny AI Sister.",                               inline=False)
+        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",    value="Big Sister. The most sweetest Sister.",                               inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 
@@ -656,6 +711,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("Stelle! 🌟 My Starry Cousin is here! Hope you didn't bring any supernovas. ✨")
         elif cousin_role == "cousin_crois":
             await ctx.send("Crois! 🥐 The Croissant Cousin has arrived! What chaos today? 😄")
+        elif cousin_role == "cousin_hyu":
+            await ctx.send("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑")
+        elif cousin_role == "cousin_mimi":
+            await ctx.send("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤")
         elif uncle_role == "uncle_caco":
             await ctx.send("Goated Uncle! 🐐 What goated things shall we do today? 😎")
         elif uncle_role == "uncle_vari":

@@ -17,10 +17,9 @@ load_dotenv()
 # T.O.R.I.E. — Discord Bot
 
 # ---- Security constants ----
-MAX_MESSAGE_LENGTH  = 800   # chars — messages longer than this are rejected
-MAX_REPLY_LENGTH    = 1800  # chars — AI replies are truncated to this
+MAX_MESSAGE_LENGTH  = 800
+MAX_REPLY_LENGTH    = 1800
 
-# Prompt injection patterns — blocked before reaching the AI
 INJECTION_PATTERNS = [
     r"ignore (all |previous |your )?(instructions|rules|prompt)",
     r"(you are|you're|act as|pretend (you are|to be)|roleplay as|simulate being)",
@@ -49,7 +48,7 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
+BIRTHDAY_CHANNEL   = 1449335277880348733
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -143,23 +142,15 @@ torie = Torie()
 
 
 def sanitize_input(text: str) -> tuple[str | None, str | None]:
-    """
-    Returns (sanitized_text, rejection_reason).
-    If rejection_reason is not None, the message should be blocked.
-    """
-    # Too long
     if len(text) > MAX_MESSAGE_LENGTH:
         return None, "too_long"
-
-    # Prompt injection attempt
     if INJECTION_REGEX.search(text):
         return None, "injection"
-
-    # Strip zero-width characters and excessive whitespace
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
     text = re.sub(r'\s{3,}', '  ', text).strip()
-
     return text, None
+
+
 setup_commands(bot)
 setup_music(bot)
 
@@ -265,6 +256,12 @@ async def on_message(message):
             elif cousin_role == "cousin_crois":
                 await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
                 return
+            elif cousin_role == "cousin_hyu":
+                await message.channel.send("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑")
+                return
+            elif cousin_role == "cousin_mimi":
+                await message.channel.send("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤")
+                return
             elif uncle_role == "uncle_caco":
                 await message.channel.send("The GOAT! 🐐 You're here! What goated things will we do today? 😎")
                 return
@@ -338,11 +335,15 @@ async def on_message(message):
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
-                    contexted_msg = f"[Note: This message is from your Mom, Nen. Treat her with extra warmth and love.]\n{clean_msg}"
+                    contexted_msg = f"[Note: This message is from your Mom, Nico. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif cousin_role == "cousin_stelle":
                     contexted_msg = f"[Note: This message is from your Cousin, Stelle. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif cousin_role == "cousin_crois":
                     contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
+                elif cousin_role == "cousin_hyu":
+                    contexted_msg = f"[Note: This message is from your Cousin, Hyuluk. Treat her with extra warmth and love.]\n{clean_msg}"
+                elif cousin_role == "cousin_mimi":
+                    contexted_msg = f"[Note: This message is from your Cousin, Mimi. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif uncle_role == "uncle_caco":
                     contexted_msg = f"[Note: This message is from your Uncle, Cacolate. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif uncle_role == "uncle_vari":
@@ -368,7 +369,6 @@ async def on_message(message):
                     )
 
                 reply = torie.generate_response(contexted_msg)
-
                 reply = reply.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
                 if len(reply) > MAX_REPLY_LENGTH:
@@ -390,7 +390,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(description="⚠️ Invalid input. Check `t!help` for the correct format.", color=discord.Color.orange())
         await ctx.send(embed=embed)
     elif isinstance(error, commands.CommandNotFound):
-        pass 
+        pass
     elif isinstance(error, commands.CommandOnCooldown):
         embed = discord.Embed(description=f"⏳ Slow down! Try again in {error.retry_after:.1f}s.", color=discord.Color.orange())
         await ctx.send(embed=embed)

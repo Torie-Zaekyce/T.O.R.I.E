@@ -7,3 +7,4 @@ PyNaCl
 python-dotenv
 deezer-python
 requests
+pymongo
