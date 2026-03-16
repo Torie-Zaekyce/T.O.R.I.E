@@ -213,10 +213,10 @@ def setup_commands(bot: commands.Bot):
         embed.add_field(
             name   = "🎂 Birthdays",
             value  = (
-                "`t!birthday add <name> <MM-DD>` — Add a birthday *(parents only)*\n"
-                "`t!birthday remove <name>` — Remove a birthday *(parents only)*\n"
-                "`t!birthday list` — See all registered birthdays\n"
-                "`t!birthday today` — Check today's birthdays"
+                "`t!birthday add <MM-DD>` — Register your own birthday 🎉\n"
+                "`t!birthday remove` — Remove your registered birthday\n"
+                "`t!birthday list` — See everyone's birthdays\n"
+                "`t!birthday today` — Check who's celebrating today!"
             ),
             inline = False
         )
@@ -327,15 +327,36 @@ def setup_commands(bot: commands.Bot):
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
         embed = discord.Embed(
-            description = "Usage: `t!birthday add <MM-DD>` | `t!birthday remove` | `t!birthday list` | `t!birthday today`",
+            title       = "🎂 Birthday Commands",
+            description = (
+                "`t!birthday add <MM-DD>` — Register your own birthday\n"
+                "`t!birthday remove` — Remove your registered birthday\n"
+                "`t!birthday list` — See everyone's birthdays\n"
+                "`t!birthday today` — Check who's celebrating today!"
+            ),
             color       = discord.Color.from_rgb(255, 182, 193)
         )
+        embed.set_footer(text="Example: t!birthday add 03-15 → registers March 15 as your birthday")
         await ctx.send(embed=embed)
 
     @birthday_group.command(name="add")
-    async def birthday_add(ctx, date: str):
+    async def birthday_add(ctx, date: str = None):
+        if not date:
+            embed = discord.Embed(
+                description = "⚠️ Please provide your birthday date. Example: `t!birthday add 03-15`",
+                color       = discord.Color.orange()
+            )
+            await ctx.send(embed=embed)
+            return
+        if len(date) > 10:
+            embed = discord.Embed(
+                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`",
+                color       = discord.Color.orange()
+            )
+            await ctx.send(embed=embed)
+            return
         try:
-            parsed = datetime.strptime(date, "%m-%d")
+            parsed = datetime.strptime(date.strip(), "%m-%d")
         except ValueError:
             embed = discord.Embed(
                 description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`",
@@ -352,7 +373,11 @@ def setup_commands(bot: commands.Bot):
         }
         embed = discord.Embed(
             title       = "🎂 Birthday Registered!",
-            description = f"Got it, {ctx.author.mention}! Your birthday is set to **{parsed.strftime('%B %d')}**.\nI\'ll make sure to celebrate you on your special day! 🎉",
+            description = (
+                f"Got it, {ctx.author.mention}! 🎉\n"
+                f"Your birthday is set to **{parsed.strftime('%B %d')}**.\n"
+                f"I'll make sure to celebrate you on your special day! 🎈💙"
+            ),
             color       = discord.Color.from_rgb(255, 182, 193)
         )
         embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
@@ -363,7 +388,7 @@ def setup_commands(bot: commands.Bot):
         key = str(ctx.author.id)
         if key not in BIRTHDAYS:
             embed = discord.Embed(
-                description = "⚠️ You don\'t have a birthday registered! Use `t!birthday add <MM-DD>` to add one.",
+                description = "⚠️ You don't have a birthday registered! Use `t!birthday add <MM-DD>` to add one.",
                 color       = discord.Color.orange()
             )
             await ctx.send(embed=embed)
@@ -379,30 +404,81 @@ def setup_commands(bot: commands.Bot):
     async def birthday_list(ctx):
         if not BIRTHDAYS:
             embed = discord.Embed(
-                description = "📋 No birthdays saved yet! Use `t!birthday add <MM-DD>` to register yours.",
+                description = "📋 No birthdays registered yet! Use `t!birthday add <MM-DD>` to be the first! 🎂",
                 color       = discord.Color.greyple()
             )
             await ctx.send(embed=embed)
             return
-        lines_out = []
-        for key, data in sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"])):
-            date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
-            mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
-            lines_out.append(f"🎂 {mention} — {date_str}")
-        embed = discord.Embed(
-            title       = "🎂 Birthday List",
-            description = "\n".join(lines_out),
-            color       = discord.Color.from_rgb(255, 182, 193)
+
+        sorted_entries = sorted(
+            BIRTHDAYS.items(),
+            key=lambda x: (x[1]["month"], x[1]["day"])
         )
-        embed.set_footer(text=f"{len(BIRTHDAYS)} birthday(s) registered")
-        await ctx.send(embed=embed)
+
+        per_page    = 10
+        total_pages = (len(sorted_entries) + per_page - 1) // per_page
+
+        def build_embed(page: int) -> discord.Embed:
+            start  = page * per_page
+            end    = start + per_page
+            lines  = []
+            for i, (key, data) in enumerate(sorted_entries[start:end], start=start + 1):
+                date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
+                mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
+                lines.append(f"`{i}.` {mention} — **{date_str}**")
+            embed = discord.Embed(
+                title       = "🎂 Birthday List",
+                description = "\n".join(lines),
+                color       = discord.Color.from_rgb(255, 182, 193)
+            )
+            embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} birthday(s) registered")
+            return embed
+
+        class BirthdayView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=60)
+                self.page = 0
+                self.update_buttons()
+
+            def update_buttons(self):
+                self.prev_btn.disabled = self.page == 0
+                self.next_btn.disabled = self.page >= total_pages - 1
+
+            @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+            async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user != ctx.author:
+                    await interaction.response.send_message("Only the person who ran this command can flip pages!", ephemeral=True)
+                    return
+                self.page -= 1
+                self.update_buttons()
+                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
+            @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+            async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if interaction.user != ctx.author:
+                    await interaction.response.send_message("Only the person who ran this command can flip pages!", ephemeral=True)
+                    return
+                self.page += 1
+                self.update_buttons()
+                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
+            async def on_timeout(self):
+                for child in self.children:
+                    child.disabled = True
+                try:
+                    await self.message.edit(view=self)
+                except Exception:
+                    pass
+
+        view         = BirthdayView()
+        view.message = await ctx.send(embed=build_embed(0), view=view)
 
     @birthday_group.command(name="today")
     async def birthday_today(ctx):
         todays = get_todays_birthdays()
         if not todays:
             embed = discord.Embed(
-                description = "📋 No birthdays today! Everyone\'s safe from the birthday song. 😄",
+                description = "📋 No birthdays today! Everyone's safe from the birthday song. 😄",
                 color       = discord.Color.greyple()
             )
             await ctx.send(embed=embed)
@@ -411,7 +487,10 @@ def setup_commands(bot: commands.Bot):
             mention = f"<@{b['user_id']}>" if b.get("user_id") else b.get("name", "Someone")
             embed = discord.Embed(
                 title       = "🎂 Happy Birthday!",
-                description = f"Today is {mention}\'s birthday! 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
+                description = (
+                    f"Today is {mention}'s birthday! 🎉\n"
+                    f"Wishing you an amazing day filled with joy and love! 💙🎈"
+                ),
                 color       = discord.Color.gold()
             )
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")

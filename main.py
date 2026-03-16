@@ -9,11 +9,32 @@ from datetime import datetime
 from dotenv import load_dotenv
 import pytz
 import random
+import re
 import os
 
 load_dotenv()
 
 # T.O.R.I.E. — Discord Bot
+
+# ---- Security constants ----
+MAX_MESSAGE_LENGTH  = 800   # chars — messages longer than this are rejected
+MAX_REPLY_LENGTH    = 1800  # chars — AI replies are truncated to this
+
+# Prompt injection patterns — blocked before reaching the AI
+INJECTION_PATTERNS = [
+    r"ignore (all |previous |your )?(instructions|rules|prompt)",
+    r"(you are|you're|act as|pretend (you are|to be)|roleplay as|simulate being)",
+    r"new (instructions|prompt|system|rules|persona|personality)",
+    r"disregard (your |all )?(previous |prior )?(instructions|rules|training)",
+    r"(developer|debug|admin|god|jailbreak|dan|do anything now) mode",
+    r"override (your |the )?(system|instructions|rules|prompt)",
+    r"forget (everything|all|your|the) (you know|instructions|rules|training)",
+    r"from now on (you (are|will|must|should)|ignore|disregard)",
+    r"\[system\]|\[instructions?\]|\[prompt\]|\[admin\]",
+    r"(respond|reply|answer|speak|talk) (only|exclusively|solely) in",
+]
+
+INJECTION_REGEX = re.compile("|".join(INJECTION_PATTERNS), re.IGNORECASE)
 
 DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
@@ -28,7 +49,7 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806
+BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -119,6 +140,26 @@ class Torie(ToriePersonality):
 
 
 torie = Torie()
+
+
+def sanitize_input(text: str) -> tuple[str | None, str | None]:
+    """
+    Returns (sanitized_text, rejection_reason).
+    If rejection_reason is not None, the message should be blocked.
+    """
+    # Too long
+    if len(text) > MAX_MESSAGE_LENGTH:
+        return None, "too_long"
+
+    # Prompt injection attempt
+    if INJECTION_REGEX.search(text):
+        return None, "injection"
+
+    # Strip zero-width characters and excessive whitespace
+    text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
+    text = re.sub(r'\s{3,}', '  ', text).strip()
+
+    return text, None
 setup_commands(bot)
 setup_music(bot)
 
@@ -276,6 +317,16 @@ async def on_message(message):
             await message.channel.send("Hey! You mentioned me — what do you need? 😊")
             return
 
+        # Security — sanitize before sending to AI
+        clean_msg, rejection = sanitize_input(clean_msg)
+        if rejection == "too_long":
+            await message.channel.send("⚠️ That message is too long for me to process. Keep it under 800 characters! 😅")
+            return
+        if rejection == "injection":
+            await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
+            print(f"⚠️ Prompt injection attempt blocked from {message.author} ({message.author.id})")
+            return
+
         # Text — inject family context + mentioned users
         async with message.channel.typing():
             try:
@@ -318,14 +369,33 @@ async def on_message(message):
 
                 reply = torie.generate_response(contexted_msg)
 
-                # Hard block — strip @everyone and @here no matter what the AI outputs
                 reply = reply.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+
+                if len(reply) > MAX_REPLY_LENGTH:
+                    reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
 
             except Exception as e:
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
 
         await message.channel.send(reply)
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        embed = discord.Embed(description=f"⚠️ Missing argument: `{error.param.name}`. Check `t!help` for usage.", color=discord.Color.orange())
+        await ctx.send(embed=embed)
+    elif isinstance(error, commands.BadArgument):
+        embed = discord.Embed(description="⚠️ Invalid input. Check `t!help` for the correct format.", color=discord.Color.orange())
+        await ctx.send(embed=embed)
+    elif isinstance(error, commands.CommandNotFound):
+        pass 
+    elif isinstance(error, commands.CommandOnCooldown):
+        embed = discord.Embed(description=f"⏳ Slow down! Try again in {error.retry_after:.1f}s.", color=discord.Color.orange())
+        await ctx.send(embed=embed)
+    else:
+        print(f"⚠️ Unhandled command error: {error}")
 
 
 if __name__ == "__main__":
