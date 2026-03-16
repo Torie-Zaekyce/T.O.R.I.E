@@ -104,13 +104,10 @@ def get_birthday_col():
             print("⚠️ MONGODB_URI not set — birthdays won't persist!")
             return None
         try:
-            import ssl
             _mongo_client = pymongo.MongoClient(
                 uri,
-                serverSelectionTimeoutMS = 5000,
-                tls                      = True,
-                tlsAllowInvalidCertificates = False,
-                ssl_cert_reqs            = ssl.CERT_NONE,
+                serverSelectionTimeoutMS    = 5000,
+                tlsAllowInvalidCertificates = True,
             )
             _birthday_col = _mongo_client["torie"]["birthdays"]
             print("✅ MongoDB connected!")
