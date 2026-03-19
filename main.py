@@ -337,21 +337,23 @@ async def on_message(message):
         lowered = clean_msg.lower()
         targets = [u for u in message.mentions if u != bot.user]
 
-        if targets and lowered.startswith("mute"):
+        # Detect mute/unmute intent — catches natural phrasing like "can you mute", "please mute"
+        mute_intent   = bool(re.search(r'\bmute\b', lowered)) and not re.search(r'\bunmute\b', lowered)
+        unmute_intent = bool(re.search(r'\bunmute\b', lowered))
+
+        if targets and mute_intent:
             if not get_parent_role(message.author):
                 embed = discord.Embed(description="⛔ Only my parents can mute users. 😏", color=discord.Color.red())
                 await message.channel.send(embed=embed)
                 return
             target   = targets[0]
             duration = parse_duration(clean_msg)
-            if not duration:
-                embed = discord.Embed(
-                    description = "⚠️ Please specify a duration. Examples: `10s`, `5m`, `1h`, `2d`, `1w`",
-                    color       = discord.Color.orange()
-                )
-                await message.channel.send(embed=embed)
-                return
             from datetime import timedelta as _td
+            if not duration:
+                duration = _td(minutes=10)
+                default  = True
+            else:
+                default  = False
             max_duration = _td(days=28)
             if duration > max_duration:
                 embed = discord.Embed(description="⚠️ Maximum mute duration is 28 days (Discord limit).", color=discord.Color.orange())
@@ -360,7 +362,6 @@ async def on_message(message):
             try:
                 until = discord.utils.utcnow() + duration
                 await target.timeout(until, reason=f"Muted by {message.author} via T.O.R.I.E.")
-                # Format duration nicely
                 parts = []
                 if duration.days:
                     parts.append(f"{duration.days}d")
@@ -374,10 +375,10 @@ async def on_message(message):
                 if secs:
                     parts.append(f"{secs}s")
                 duration_str = " ".join(parts) or "unknown"
-                embed = discord.Embed(
-                    description = f"🔇 Muted {target.mention} for **{duration_str}**.",
-                    color       = discord.Color.red()
-                )
+                desc = f"🔇 Muted {target.mention} for **{duration_str}**."
+                if default:
+                    desc += " *(no duration given — defaulted to 10 minutes)*"
+                embed = discord.Embed(description=desc, color=discord.Color.red())
                 await message.channel.send(embed=embed)
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to mute that user.", color=discord.Color.red())
@@ -388,7 +389,7 @@ async def on_message(message):
                 await message.channel.send(embed=embed)
             return
 
-        if targets and lowered.startswith("unmute"):
+        if targets and unmute_intent:
             if not get_parent_role(message.author):
                 embed = discord.Embed(description="⛔ Only my parents can unmute users. 😏", color=discord.Color.red())
                 await message.channel.send(embed=embed)
