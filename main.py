@@ -49,9 +49,9 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806  
-MUTED_ROLE_ID      = 1447475985988587661                    
-MUTED_CHANNEL_ID   = 1447475213842251796                   
+BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
+MUTED_ROLE_ID      = 0                    # ← paste your Muted role ID here
+MUTED_CHANNEL_ID   = 0                    # ← paste your muted-members channel ID here
 
 # Stores active mute tasks so they can be cancelled on early unmute
 # { user_id: asyncio.Task }
@@ -278,11 +278,14 @@ async def on_message(message):
             elif sister_role == "sister_abby":
                 await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
                 return
-            elif brother_role == "broinlaw_haru":
-                await message.channel.send("Haru! 🖤 Don't tell me you're gonna flirt with my big sister here. 💢")
-                return
             elif sister_role == "sister_kde":
                 await message.channel.send("Kde! 🩷 What crazy thing shall we do today? 💖")
+                return
+            elif sister_role == "sister_kio":
+                await message.channel.send("Kio! 🎤 What song are we singing today? 🎶")
+                return
+            elif brother_role == "broinlaw_haru":
+                await message.channel.send("🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢")
                 return
 
         # Sticker
@@ -409,8 +412,8 @@ async def on_message(message):
                     mute_embed = discord.Embed(
                         title       = "🔇 You have been muted",
                         description = (
-                            f"Hey {target.mention}, you've been muted for **{duration_str}**."
-                            f"You can only see this channel while muted."
+                            f"Hey {target.mention}, you've been muted for **{duration_str}**.\n"
+                            f"You can only see this channel while muted.\n"
                             f"Your mute will be lifted automatically when the time runs out."
                         ),
                         color       = discord.Color.red()
@@ -505,7 +508,7 @@ async def on_message(message):
                 cousin_role = get_cousin_role(message.author)
                 uncle_role  = get_uncle_role(message.author)
                 sister_role = get_sister_role(message.author)
-                brother_role = get_brother_role(message.author)
+
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
@@ -526,9 +529,10 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Big Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 elif sister_role == "sister_kde":
                     contexted_msg = f"[Note: This message is from your Big Sister, Kde. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
+                elif sister_role == "sister_kio":
+                    contexted_msg = f"[Note: This message is from your Sister, Kio. Treat her with extra warmth and love.]\n{clean_msg}"
                 elif brother_role == "broinlaw_haru":
                     contexted_msg = f"[Note: This message is from your Brother In Law, Haru. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-
                 else:
                     contexted_msg = clean_msg
 
