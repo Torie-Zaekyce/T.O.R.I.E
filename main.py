@@ -9,6 +9,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import pytz
 import random
+import asyncio
 import re
 import os
 
@@ -48,7 +49,13 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
+BIRTHDAY_CHANNEL   = 1242875666265800806  
+MUTED_ROLE_ID      = 1447475985988587661                    
+MUTED_CHANNEL_ID   = 1447475213842251796                   
+
+# Stores active mute tasks so they can be cancelled on early unmute
+# { user_id: asyncio.Task }
+_mute_tasks: dict[int, asyncio.Task] = {}
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -342,8 +349,8 @@ async def on_message(message):
         unmute_intent = bool(re.search(r'\bunmute\b', lowered))
 
         if targets and mute_intent:
-            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author) or get_cousin_role(message.author)):
-                embed = discord.Embed(description="⛔ Only my parents, uncles, cousins or sisters can mute users. 😏", color=discord.Color.red())
+            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author)):
+                embed = discord.Embed(description="⛔ Only my parents, uncles, or sisters can mute users. 😏", color=discord.Color.red())
                 await message.channel.send(embed=embed)
                 return
             target   = targets[0]
@@ -359,27 +366,75 @@ async def on_message(message):
                 embed = discord.Embed(description="⚠️ Maximum mute duration is 28 days (Discord limit).", color=discord.Color.orange())
                 await message.channel.send(embed=embed)
                 return
+
+            # Format duration string
+            parts = []
+            if duration.days:
+                parts.append(f"{duration.days}d")
+            secs = duration.seconds
+            if secs >= 3600:
+                parts.append(f"{secs // 3600}h")
+                secs %= 3600
+            if secs >= 60:
+                parts.append(f"{secs // 60}m")
+                secs %= 60
+            if secs:
+                parts.append(f"{secs}s")
+            duration_str = " ".join(parts) or "unknown"
+
             try:
-                until = discord.utils.utcnow() + duration
-                await target.timeout(until, reason=f"Muted by {message.author} via T.O.R.I.E.")
-                parts = []
-                if duration.days:
-                    parts.append(f"{duration.days}d")
-                secs = duration.seconds
-                if secs >= 3600:
-                    parts.append(f"{secs // 3600}h")
-                    secs %= 3600
-                if secs >= 60:
-                    parts.append(f"{secs // 60}m")
-                    secs %= 60
-                if secs:
-                    parts.append(f"{secs}s")
-                duration_str = " ".join(parts) or "unknown"
+                # Cancel any existing mute task for this user
+                if target.id in _mute_tasks:
+                    _mute_tasks[target.id].cancel()
+
+                # Assign the Muted role
+                muted_role = message.guild.get_role(MUTED_ROLE_ID)
+                if muted_role:
+                    await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
+                else:
+                    print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found")
+
                 desc = f"🔇 Muted {target.mention} for **{duration_str}**."
                 if default:
-                    desc += " *(no duration given — defaulted to 10 minutes)*"
+                    desc += " *(no duration specified — defaulted to 10 minutes)*"
                 embed = discord.Embed(description=desc, color=discord.Color.red())
                 await message.channel.send(embed=embed)
+
+                # Notify in muted channel
+                muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
+                if muted_ch:
+                    mute_embed = discord.Embed(
+                        title       = "🔇 You have been muted",
+                        description = (
+                            f"Hey {target.mention}, you've been muted for **{duration_str}**."
+                            f"You can only see this channel while muted."
+                            f"Your mute will be lifted automatically when the time runs out."
+                        ),
+                        color       = discord.Color.red()
+                    )
+                    mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
+                    await muted_ch.send(embed=mute_embed)
+
+                # Start auto-unmute timer
+                async def auto_unmute(member, role, seconds, ch):
+                    await asyncio.sleep(seconds)
+                    try:
+                        await member.remove_roles(role, reason="Mute duration expired — T.O.R.I.E.")
+                        _mute_tasks.pop(member.id, None)
+                        if ch:
+                            done_embed = discord.Embed(
+                                description = f"🔊 {member.mention} your mute has expired. Welcome back!",
+                                color       = discord.Color.green()
+                            )
+                            await ch.send(embed=done_embed)
+                        print(f"✅ Auto-unmuted {member.display_name}")
+                    except Exception as e:
+                        print(f"⚠️ Auto-unmute failed for {member.display_name}: {e}")
+
+                total_seconds = int(duration.total_seconds())
+                task = asyncio.create_task(auto_unmute(target, muted_role, total_seconds, muted_ch if muted_ch else None))
+                _mute_tasks[target.id] = task
+
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to mute that user.", color=discord.Color.red())
                 await message.channel.send(embed=embed)
@@ -396,12 +451,31 @@ async def on_message(message):
                 return
             target = targets[0]
             try:
-                await target.timeout(None, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
+                # Cancel active timer if exists
+                if target.id in _mute_tasks:
+                    _mute_tasks[target.id].cancel()
+                    _mute_tasks.pop(target.id, None)
+
+                # Remove Muted role
+                muted_role = message.guild.get_role(MUTED_ROLE_ID)
+                if muted_role and muted_role in target.roles:
+                    await target.remove_roles(muted_role, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
+
                 embed = discord.Embed(
                     description = f"🔊 Unmuted {target.mention}. Welcome back!",
                     color       = discord.Color.green()
                 )
                 await message.channel.send(embed=embed)
+
+                # Notify in muted channel
+                muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
+                if muted_ch:
+                    done_embed = discord.Embed(
+                        description = f"🔊 {target.mention} has been unmuted early. Welcome back!",
+                        color       = discord.Color.green()
+                    )
+                    await muted_ch.send(embed=done_embed)
+
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to unmute that user.", color=discord.Color.red())
                 await message.channel.send(embed=embed)
