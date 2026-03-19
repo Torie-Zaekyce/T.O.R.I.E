@@ -48,7 +48,7 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1449335277880348733
+BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!")
@@ -312,6 +312,102 @@ async def on_message(message):
         # Empty mention with no special role
         if not clean_msg:
             await message.channel.send("Hey! You mentioned me — what do you need? 😊")
+            return
+
+        # ---- Mute / Unmute via mention ----
+        # e.g. "@T.O.R.I.E. mute @user for 10d" or "@T.O.R.I.E. unmute @user"
+
+        def parse_duration(text: str):
+            import re as _re
+            from datetime import timedelta
+            patterns = {
+                _re.compile(r"(\d+)\s*s(?:ec(?:ond)?s?)?", _re.I): "seconds",
+                _re.compile(r"(\d+)\s*m(?:in(?:ute)?s?)?", _re.I): "minutes",
+                _re.compile(r"(\d+)\s*h(?:(?:ou)?rs?)?",   _re.I): "hours",
+                _re.compile(r"(\d+)\s*d(?:ays?)?",         _re.I): "days",
+                _re.compile(r"(\d+)\s*w(?:eeks?)?",        _re.I): "weeks",
+            }
+            kwargs = {}
+            for pattern, unit in patterns.items():
+                m = pattern.search(text)
+                if m:
+                    kwargs[unit] = int(m.group(1))
+            return timedelta(**kwargs) if kwargs else None
+
+        lowered = clean_msg.lower()
+        targets = [u for u in message.mentions if u != bot.user]
+
+        if targets and lowered.startswith("mute"):
+            if not get_parent_role(message.author):
+                embed = discord.Embed(description="⛔ Only my parents can mute users. 😏", color=discord.Color.red())
+                await message.channel.send(embed=embed)
+                return
+            target   = targets[0]
+            duration = parse_duration(clean_msg)
+            if not duration:
+                embed = discord.Embed(
+                    description = "⚠️ Please specify a duration. Examples: `10s`, `5m`, `1h`, `2d`, `1w`",
+                    color       = discord.Color.orange()
+                )
+                await message.channel.send(embed=embed)
+                return
+            from datetime import timedelta as _td
+            max_duration = _td(days=28)
+            if duration > max_duration:
+                embed = discord.Embed(description="⚠️ Maximum mute duration is 28 days (Discord limit).", color=discord.Color.orange())
+                await message.channel.send(embed=embed)
+                return
+            try:
+                until = discord.utils.utcnow() + duration
+                await target.timeout(until, reason=f"Muted by {message.author} via T.O.R.I.E.")
+                # Format duration nicely
+                parts = []
+                if duration.days:
+                    parts.append(f"{duration.days}d")
+                secs = duration.seconds
+                if secs >= 3600:
+                    parts.append(f"{secs // 3600}h")
+                    secs %= 3600
+                if secs >= 60:
+                    parts.append(f"{secs // 60}m")
+                    secs %= 60
+                if secs:
+                    parts.append(f"{secs}s")
+                duration_str = " ".join(parts) or "unknown"
+                embed = discord.Embed(
+                    description = f"🔇 Muted {target.mention} for **{duration_str}**.",
+                    color       = discord.Color.red()
+                )
+                await message.channel.send(embed=embed)
+            except discord.Forbidden:
+                embed = discord.Embed(description="⛔ I don't have permission to mute that user.", color=discord.Color.red())
+                await message.channel.send(embed=embed)
+            except Exception as e:
+                print(f"❌ Mute error: {e}")
+                embed = discord.Embed(description="❌ Something went wrong trying to mute that user.", color=discord.Color.red())
+                await message.channel.send(embed=embed)
+            return
+
+        if targets and lowered.startswith("unmute"):
+            if not get_parent_role(message.author):
+                embed = discord.Embed(description="⛔ Only my parents can unmute users. 😏", color=discord.Color.red())
+                await message.channel.send(embed=embed)
+                return
+            target = targets[0]
+            try:
+                await target.timeout(None, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
+                embed = discord.Embed(
+                    description = f"🔊 Unmuted {target.mention}. Welcome back!",
+                    color       = discord.Color.green()
+                )
+                await message.channel.send(embed=embed)
+            except discord.Forbidden:
+                embed = discord.Embed(description="⛔ I don't have permission to unmute that user.", color=discord.Color.red())
+                await message.channel.send(embed=embed)
+            except Exception as e:
+                print(f"❌ Unmute error: {e}")
+                embed = discord.Embed(description="❌ Something went wrong trying to unmute that user.", color=discord.Color.red())
+                await message.channel.send(embed=embed)
             return
 
         # Security — sanitize before sending to AI

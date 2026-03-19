@@ -44,7 +44,7 @@ COUSIN = {
     },
     "cousin_mimi": {
         "username": "Mimi",
-        "id":       1076407798809776138,
+        "id":       1196640036465148035,
         "title":    "Serious Cousin",
         "role":     "Sekai"
     }
@@ -272,7 +272,9 @@ def setup_commands(bot: commands.Bot):
                 "`t!filter add <word>` — Add a word to the filter *(parents only)*\n"
                 "`t!filter remove <word>` — Remove a word from the filter *(parents only)*\n"
                 "`t!filter list` — Show all currently filtered words *(parents only)*\n"
-                "`t!filter clear` — Clear all filtered words *(parents only)*"
+                "`t!filter clear` — Clear all filtered words *(parents only)*\n"
+                "`@T.O.R.I.E. mute @user 10m` — Mute a user *(parents only)*\n"
+                "`@T.O.R.I.E. unmute @user` — Unmute a user *(parents only)*"
             ),
             inline = False
         )
