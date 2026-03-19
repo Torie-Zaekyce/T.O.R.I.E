@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands, tasks
 from groq import Groq
 from personality import ToriePersonality
-from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, contains_filtered_word, get_todays_birthdays
+from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, get_brother_role, contains_filtered_word, get_todays_birthdays
 from music import setup_music
 from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS
 from datetime import datetime
@@ -250,7 +250,7 @@ async def on_message(message):
             cousin_role = get_cousin_role(message.author)
             uncle_role  = get_uncle_role(message.author)
             sister_role = get_sister_role(message.author)
-
+            brother_role = get_brother_role(message.author)
             if parent_role == "dad":
                 await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
                 return
@@ -277,6 +277,9 @@ async def on_message(message):
                 return
             elif sister_role == "sister_abby":
                 await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
+                return
+            elif brother_role == "broinlaw_haru":
+                await message.channel.send("Haru! 🖤 Don't tell me you're gonna flirt with my big sister here. 💢")
                 return
             elif sister_role == "sister_kde":
                 await message.channel.send("Kde! 🩷 What crazy thing shall we do today? 💖")
@@ -502,7 +505,7 @@ async def on_message(message):
                 cousin_role = get_cousin_role(message.author)
                 uncle_role  = get_uncle_role(message.author)
                 sister_role = get_sister_role(message.author)
-
+                brother_role = get_brother_role(message.author)
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
@@ -523,6 +526,9 @@ async def on_message(message):
                     contexted_msg = f"[Note: This message is from your Big Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
                 elif sister_role == "sister_kde":
                     contexted_msg = f"[Note: This message is from your Big Sister, Kde. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
+                elif brother_role == "broinlaw_haru":
+                    contexted_msg = f"[Note: This message is from your Brother In Law, Haru. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
+
                 else:
                     contexted_msg = clean_msg
 
