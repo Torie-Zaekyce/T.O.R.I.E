@@ -80,7 +80,7 @@ SISTER = {
     },
     "sister_kio": {
         "username": "Kio",
-        "id":       1278625221078683670,
+        "id":       1477371709849075943,
         "title":    "Sister",
         "role":     "KDE Plasma"
     }
