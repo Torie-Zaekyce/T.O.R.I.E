@@ -49,9 +49,9 @@ DINNER_HOUR        = 19
 DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806  # ← change this to your birthday channel ID
-MUTED_ROLE_ID      = 0                    # ← paste your Muted role ID here
-MUTED_CHANNEL_ID   = 0                    # ← paste your muted-members channel ID here
+BIRTHDAY_CHANNEL   = 1242875666265800806 
+MUTED_ROLE_ID      = 1447475985988587661                
+MUTED_CHANNEL_ID   = 1447475213842251796        
 
 # Stores active mute tasks so they can be cancelled on early unmute
 # { user_id: asyncio.Task }
