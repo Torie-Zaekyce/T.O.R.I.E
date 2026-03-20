@@ -508,7 +508,7 @@ async def on_message(message):
                 cousin_role = get_cousin_role(message.author)
                 uncle_role  = get_uncle_role(message.author)
                 sister_role = get_sister_role(message.author)
-
+                brother_role = get_brother_role(message.author)
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
