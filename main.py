@@ -451,8 +451,8 @@ async def on_message(message):
             return
 
         if targets and unmute_intent:
-            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author)):
-                embed = discord.Embed(description="⛔ Only my parents, uncles, or sisters can unmute users. 😏", color=discord.Color.red())
+            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author) or get_brother_role(message.author) or get_cousin_role(message.author)):
+                embed = discord.Embed(description="⛔ Only my parents, uncles cousins, sisters, or my brother in law can mute users. 😝", color=discord.Color.red())
                 await message.channel.send(embed=embed)
                 return
             target = targets[0]
