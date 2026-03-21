@@ -42,19 +42,18 @@ GROQ_MODEL         = "llama-3.3-70b-versatile"
 GROQ_FALLBACK      = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
 
-TIMEZONE           = pytz.timezone("Asia/Manila")
-GREET_HOUR         = 7
-LUNCH_HOUR         = 12
-DINNER_HOUR        = 19
-DINNER_MINUTE      = 30
-EVENING_HOUR       = 19
-GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1242875666265800806 
-MUTED_ROLE_ID      = 1447475985988587661                
-MUTED_CHANNEL_ID   = 1447475213842251796        
+TIMEZONE             = pytz.timezone("Asia/Manila")
+GREET_HOUR           = 7
+LUNCH_HOUR           = 12
+DINNER_HOUR          = 19
+DINNER_MINUTE        = 30
+EVENING_HOUR         = 19
+GENERAL_CHANNEL      = 1242875666265800806
+BIRTHDAY_CHANNEL     = 1449335277880348733  
+BIRTHDAY_PING_ROLE   = 1242887610586628166                  
+MUTED_ROLE_ID        = 1447475985988587661
+MUTED_CHANNEL_ID     = 1447475213842251796
 
-# Stores active mute tasks so they can be cancelled on early unmute
-# { user_id: asyncio.Task }
 _mute_tasks: dict[int, asyncio.Task] = {}
 
 if not DISCORD_TOKEN:
@@ -195,15 +194,22 @@ async def scheduled_announcements():
                 print(f"❌ Could not find birthday channel with ID {BIRTHDAY_CHANNEL}")
             else:
                 for b in birthdays:
-                    mention = f" <@{b['user_id']}>" if b.get("user_id") else ""
+                    user_mention = f"<@{b['user_id']}>" if b.get("user_id") else f"**{b.get('name', 'Someone')}**"
+                    role_ping    = f"<@&{BIRTHDAY_PING_ROLE}>" if BIRTHDAY_PING_ROLE else ""
+
                     embed = discord.Embed(
-                        title       = "🎂 Happy Birthday!",
-                        description = f"Today is **{b['name']}**'s birthday!{mention} 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
-                        color       = discord.Color.gold()
+                        description = (
+                            f"𝑰𝒕'𝒔 𝒂 𝒔𝒕𝒂𝒓'𝒔 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒅𝒂𝒚 𝒕𝒐𝒅𝒂𝒚 🎂❤️\n"
+                            f"𝑾𝒊𝒔𝒉 {user_mention} 𝒂 𝒉𝒂𝒑𝒑𝒚 𝒃𝒊𝒓𝒕𝒉𝒅𝒂𝒚! 🎉🎈"
+                        ),
+                        color = discord.Color.gold()
                     )
                     embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
+
+                    if role_ping:
+                        await bday_channel.send(role_ping)
                     await bday_channel.send(embed=embed)
-                    print(f"✅ Birthday announcement sent for {b['name']}")
+                    print(f"✅ Birthday announcement sent for {b.get('name', 'unknown')}")
 
 
 @bot.event
@@ -246,10 +252,10 @@ async def on_message(message):
 
         # Empty mention — family special greetings
         if not clean_msg and not message.stickers and not message.attachments:
-            parent_role = get_parent_role(message.author)
-            cousin_role = get_cousin_role(message.author)
-            uncle_role  = get_uncle_role(message.author)
-            sister_role = get_sister_role(message.author)
+            parent_role  = get_parent_role(message.author)
+            cousin_role  = get_cousin_role(message.author)
+            uncle_role   = get_uncle_role(message.author)
+            sister_role  = get_sister_role(message.author)
             brother_role = get_brother_role(message.author)
             if parent_role == "dad":
                 await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
@@ -328,7 +334,6 @@ async def on_message(message):
             return
 
         # ---- Mute / Unmute via mention ----
-        # e.g. "@T.O.R.I.E. mute @user for 10d" or "@T.O.R.I.E. unmute @user"
 
         def parse_duration(text: str):
             import re as _re
@@ -350,13 +355,21 @@ async def on_message(message):
         lowered = clean_msg.lower()
         targets = [u for u in message.mentions if u != bot.user]
 
-        # Detect mute/unmute intent — catches natural phrasing like "can you mute", "please mute"
         mute_intent   = bool(re.search(r'\bmute\b', lowered)) and not re.search(r'\bunmute\b', lowered)
         unmute_intent = bool(re.search(r'\bunmute\b', lowered))
 
+        def can_moderate(user):
+            return (
+                get_parent_role(user) or
+                get_uncle_role(user)  or
+                get_sister_role(user) or
+                get_brother_role(user) or
+                get_cousin_role(user)
+            )
+
         if targets and mute_intent:
-            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author) or get_brother_role(message.author) or get_cousin_role(message.author)):
-                embed = discord.Embed(description="⛔ Only my parents, uncles cousins, sisters, or my brother in law can mute users. 😝", color=discord.Color.red())
+            if not can_moderate(message.author):
+                embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can mute users. 😝", color=discord.Color.red())
                 await message.channel.send(embed=embed)
                 return
             target   = targets[0]
@@ -373,7 +386,6 @@ async def on_message(message):
                 await message.channel.send(embed=embed)
                 return
 
-            # Format duration string
             parts = []
             if duration.days:
                 parts.append(f"{duration.days}d")
@@ -389,11 +401,9 @@ async def on_message(message):
             duration_str = " ".join(parts) or "unknown"
 
             try:
-                # Cancel any existing mute task for this user
                 if target.id in _mute_tasks:
                     _mute_tasks[target.id].cancel()
 
-                # Assign the Muted role
                 muted_role = message.guild.get_role(MUTED_ROLE_ID)
                 if muted_role:
                     await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
@@ -406,7 +416,6 @@ async def on_message(message):
                 embed = discord.Embed(description=desc, color=discord.Color.red())
                 await message.channel.send(embed=embed)
 
-                # Notify in muted channel
                 muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
                 if muted_ch:
                     mute_embed = discord.Embed(
@@ -421,7 +430,6 @@ async def on_message(message):
                     mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
                     await muted_ch.send(embed=mute_embed)
 
-                # Start auto-unmute timer
                 async def auto_unmute(member, role, seconds, ch):
                     await asyncio.sleep(seconds)
                     try:
@@ -451,18 +459,16 @@ async def on_message(message):
             return
 
         if targets and unmute_intent:
-            if not (get_parent_role(message.author) or get_uncle_role(message.author) or get_sister_role(message.author) or get_brother_role(message.author) or get_cousin_role(message.author)):
-                embed = discord.Embed(description="⛔ Only my parents, uncles cousins, sisters, or my brother in law can mute users. 😝", color=discord.Color.red())
+            if not can_moderate(message.author):
+                embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can unmute users. 😝", color=discord.Color.red())
                 await message.channel.send(embed=embed)
                 return
             target = targets[0]
             try:
-                # Cancel active timer if exists
                 if target.id in _mute_tasks:
                     _mute_tasks[target.id].cancel()
                     _mute_tasks.pop(target.id, None)
 
-                # Remove Muted role
                 muted_role = message.guild.get_role(MUTED_ROLE_ID)
                 if muted_role and muted_role in target.roles:
                     await target.remove_roles(muted_role, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
@@ -473,7 +479,6 @@ async def on_message(message):
                 )
                 await message.channel.send(embed=embed)
 
-                # Notify in muted channel
                 muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
                 if muted_ch:
                     done_embed = discord.Embed(
@@ -504,11 +509,12 @@ async def on_message(message):
         # Text — inject family context + mentioned users
         async with message.channel.typing():
             try:
-                parent_role = get_parent_role(message.author)
-                cousin_role = get_cousin_role(message.author)
-                uncle_role  = get_uncle_role(message.author)
-                sister_role = get_sister_role(message.author)
+                parent_role  = get_parent_role(message.author)
+                cousin_role  = get_cousin_role(message.author)
+                uncle_role   = get_uncle_role(message.author)
+                sister_role  = get_sister_role(message.author)
                 brother_role = get_brother_role(message.author)
+
                 if parent_role == "dad":
                     contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
                 elif parent_role == "mom":
@@ -536,7 +542,6 @@ async def on_message(message):
                 else:
                     contexted_msg = clean_msg
 
-                # Inject mentioned users so T.O.R.I.E. can ping them in replies
                 mentioned = [u for u in message.mentions if u != bot.user]
                 if mentioned:
                     mention_info = ", ".join(
