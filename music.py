@@ -12,19 +12,26 @@ from discord.ext import commands
 
 
 YTDL_OPTIONS = {
-    "format":         "bestaudio/best",
-    "quiet":          True,
-    "no_warnings":    True,
-    "default_search": "ytsearch",
-    "source_address": "0.0.0.0",
+    "format":              "bestaudio/best",
+    "quiet":               True,
+    "no_warnings":         True,
+    "default_search":      "ytsearch",
+    "source_address":      "0.0.0.0",
+    "nocheckcertificate":  True,
+    "ignoreerrors":        False,
+    "logtostderr":         False,
+    "cookiesfrombrowser":  None,
+    "extractor_args":      {"youtube": {"skip": ["dash", "hls"]}},
 }
 
 YTDL_OPTIONS_PLAYLIST = {
-    "format":         "bestaudio/best",
-    "quiet":          True,
-    "no_warnings":    True,
-    "extract_flat":   "in_playlist",
-    "source_address": "0.0.0.0",
+    "format":              "bestaudio/best",
+    "quiet":               True,
+    "no_warnings":         True,
+    "extract_flat":        "in_playlist",
+    "source_address":      "0.0.0.0",
+    "nocheckcertificate":  True,
+    "cookiesfrombrowser":  None,
 }
 
 FFMPEG_OPTIONS = {
@@ -224,10 +231,8 @@ def spotify_playlist_tracks(url: str) -> list[dict]:
             print(f"⚠️ Spotify playlist page returned {resp.status_code}")
             return []
 
-        # Extract JSON embedded in the page
         match = re.search(r'<script id="initial-store" type="application/json">(.*?)</script>', resp.text, re.DOTALL)
         if not match:
-            # Fallback — try to grab track names and artists from meta tags / og tags
             titles  = re.findall(r'"track_name":"([^"]+)"', resp.text)
             artists = re.findall(r'"artist_name":"([^"]+)"', resp.text)
             tracks  = []
@@ -249,10 +254,7 @@ def spotify_playlist_tracks(url: str) -> list[dict]:
 
         import json
         data   = json.loads(match.group(1))
-        items  = (
-            data.get("entities", {})
-                .get("items", {})
-        )
+        items  = data.get("entities", {}).get("items", {})
         tracks = []
         for key, item in items.items():
             if item.get("type") != "track":
@@ -284,6 +286,8 @@ def spotify_playlist_tracks(url: str) -> list[dict]:
     except Exception as e:
         print(f"⚠️ Spotify playlist scrape error: {e}")
         return []
+
+def spotify_album_tracks(url: str) -> list[dict]:
     client = sp()
     if not client:
         return []
@@ -293,7 +297,6 @@ def spotify_playlist_tracks(url: str) -> list[dict]:
         results  = client.album_tracks(album_id)
         art      = album["images"][0]["url"] if album["images"] else None
         tracks   = []
-
         for track in results["items"]:
             tracks.append({
                 "title":     track["name"],
@@ -481,7 +484,7 @@ def setup_music(bot: commands.Bot):
 
         async with ctx.typing():
 
-            # ---- Spotify playlist (via spotdl) ----
+            # ---- Spotify playlist ----
             if is_spotify_playlist(query):
                 tracks = await asyncio.get_event_loop().run_in_executor(None, lambda: spotify_playlist_tracks(query))
                 if not tracks:
