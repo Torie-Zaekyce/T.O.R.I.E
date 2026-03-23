@@ -351,13 +351,13 @@ async def on_message(message):
                 if m:
                     kwargs[unit] = int(m.group(1))
             return timedelta(**kwargs) if kwargs else None
-
+ 
         lowered = clean_msg.lower()
         targets = [u for u in message.mentions if u != bot.user]
-
+ 
         mute_intent   = bool(re.search(r'\bmute\b', lowered)) and not re.search(r'\bunmute\b', lowered)
         unmute_intent = bool(re.search(r'\bunmute\b', lowered))
-
+ 
         def can_moderate(user):
             return (
                 get_parent_role(user) or
@@ -366,7 +366,7 @@ async def on_message(message):
                 get_brother_role(user) or
                 get_cousin_role(user)
             )
-
+ 
         if targets and mute_intent:
             if not can_moderate(message.author):
                 embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can mute users. 😝", color=discord.Color.red())
@@ -385,7 +385,7 @@ async def on_message(message):
                 embed = discord.Embed(description="⚠️ Maximum mute duration is 28 days (Discord limit).", color=discord.Color.orange())
                 await message.channel.send(embed=embed)
                 return
-
+ 
             parts = []
             if duration.days:
                 parts.append(f"{duration.days}d")
@@ -399,23 +399,23 @@ async def on_message(message):
             if secs:
                 parts.append(f"{secs}s")
             duration_str = " ".join(parts) or "unknown"
-
+ 
             try:
                 if target.id in _mute_tasks:
                     _mute_tasks[target.id].cancel()
-
+ 
                 muted_role = message.guild.get_role(MUTED_ROLE_ID)
                 if muted_role:
                     await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
                 else:
                     print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found")
-
+ 
                 desc = f"🔇 Muted {target.mention} for **{duration_str}**."
                 if default:
                     desc += " *(no duration specified — defaulted to 10 minutes)*"
                 embed = discord.Embed(description=desc, color=discord.Color.red())
                 await message.channel.send(embed=embed)
-
+ 
                 muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
                 if muted_ch:
                     mute_embed = discord.Embed(
@@ -429,26 +429,39 @@ async def on_message(message):
                     )
                     mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
                     await muted_ch.send(embed=mute_embed)
-
+ 
                 async def auto_unmute(member, role, seconds, ch):
                     await asyncio.sleep(seconds)
                     try:
                         await member.remove_roles(role, reason="Mute duration expired — T.O.R.I.E.")
                         _mute_tasks.pop(member.id, None)
+ 
+                        # Notify muted channel that the mute expired
                         if ch:
-                            done_embed = discord.Embed(
-                                description = f"🔊 {member.mention} your mute has expired. Welcome back!",
+                            muted_done_embed = discord.Embed(
+                                description = f"🔊 {member.mention} your mute has expired. You can now chat again!",
                                 color       = discord.Color.green()
                             )
-                            await ch.send(embed=done_embed)
+                            await ch.send(embed=muted_done_embed)
+ 
+                        # Announce in general chat that the user is back
+                        gen_channel = bot.get_channel(GENERAL_CHANNEL)
+                        if gen_channel:
+                            gen_embed = discord.Embed(
+                                description = f"🔊 {member.mention} has been unmuted and is back in the server!",
+                                color       = discord.Color.green()
+                            )
+                            gen_embed.set_footer(text="T.O.R.I.E. — mute timer expired")
+                            await gen_channel.send(embed=gen_embed)
+ 
                         print(f"✅ Auto-unmuted {member.display_name}")
                     except Exception as e:
                         print(f"⚠️ Auto-unmute failed for {member.display_name}: {e}")
-
+ 
                 total_seconds = int(duration.total_seconds())
                 task = asyncio.create_task(auto_unmute(target, muted_role, total_seconds, muted_ch if muted_ch else None))
                 _mute_tasks[target.id] = task
-
+ 
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to mute that user.", color=discord.Color.red())
                 await message.channel.send(embed=embed)
@@ -457,7 +470,7 @@ async def on_message(message):
                 embed = discord.Embed(description="❌ Something went wrong trying to mute that user.", color=discord.Color.red())
                 await message.channel.send(embed=embed)
             return
-
+ 
         if targets and unmute_intent:
             if not can_moderate(message.author):
                 embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can unmute users. 😝", color=discord.Color.red())
@@ -468,17 +481,17 @@ async def on_message(message):
                 if target.id in _mute_tasks:
                     _mute_tasks[target.id].cancel()
                     _mute_tasks.pop(target.id, None)
-
+ 
                 muted_role = message.guild.get_role(MUTED_ROLE_ID)
                 if muted_role and muted_role in target.roles:
                     await target.remove_roles(muted_role, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
-
+ 
                 embed = discord.Embed(
                     description = f"🔊 Unmuted {target.mention}. Welcome back!",
                     color       = discord.Color.green()
                 )
                 await message.channel.send(embed=embed)
-
+ 
                 muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
                 if muted_ch:
                     done_embed = discord.Embed(
@@ -486,7 +499,7 @@ async def on_message(message):
                         color       = discord.Color.green()
                     )
                     await muted_ch.send(embed=done_embed)
-
+ 
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to unmute that user.", color=discord.Color.red())
                 await message.channel.send(embed=embed)
