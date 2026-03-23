@@ -75,14 +75,14 @@ SISTER = {
     "sister_kde": {
         "username": "Kde",
         "id":       1278625221078683670,
-        "title":    "Sister",
+        "title":    "Yearner Sister",
         "role":     "KDE Plasma"
     },
     "sister_kio": {
         "username": "Kio",
         "id":       1477371709849075943,
-        "title":    "Sister",
-        "role":     "KDE Plasma"
+        "title":    "Singer Sister",
+        "role":     "Singer"
     }
 }
 
