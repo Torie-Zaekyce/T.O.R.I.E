@@ -106,17 +106,18 @@ FILTERED_WORDS = [
     "negra",
 ]
 
-# ---- MongoDB Birthday Store ----
-
+# ---- MongoDB Store (shared client) ----
+ 
 _mongo_client = None
 _birthday_col = None
-
-def get_birthday_col():
-    global _mongo_client, _birthday_col
-    if _birthday_col is None:
+_filter_col   = None
+ 
+def _get_client():
+    global _mongo_client
+    if _mongo_client is None:
         uri = os.getenv("MONGODB_URI")
         if not uri:
-            print("⚠️ MONGODB_URI not set — birthdays won't persist!")
+            print("⚠️ MONGODB_URI not set — data won't persist!")
             return None
         try:
             import certifi
@@ -125,12 +126,30 @@ def get_birthday_col():
                 serverSelectionTimeoutMS = 5000,
                 tlsCAFile                = certifi.where(),
             )
-            _birthday_col = _mongo_client["torie"]["birthdays"]
             print("✅ MongoDB connected!")
         except Exception as e:
             print(f"⚠️ MongoDB connection failed: {e}")
+    return _mongo_client
+ 
+def get_birthday_col():
+    global _birthday_col
+    if _birthday_col is None:
+        client = _get_client()
+        if client:
+            _birthday_col = client["torie"]["birthdays"]
     return _birthday_col
-
+ 
+def get_filter_col():
+    global _filter_col
+    if _filter_col is None:
+        client = _get_client()
+        if client:
+            _filter_col = client["torie"]["filtered_words"]
+    return _filter_col
+ 
+ 
+# ---- Birthday helpers ----
+ 
 def load_birthdays() -> dict:
     col = get_birthday_col()
     if col is None:
@@ -140,7 +159,7 @@ def load_birthdays() -> dict:
     except Exception as e:
         print(f"⚠️ Failed to load birthdays: {e}")
         return {}
-
+ 
 def save_birthday(user_id: str, data: dict):
     col = get_birthday_col()
     if col is None:
@@ -149,7 +168,7 @@ def save_birthday(user_id: str, data: dict):
         col.replace_one({"_id": user_id}, {"_id": user_id, **data}, upsert=True)
     except Exception as e:
         print(f"⚠️ Failed to save birthday: {e}")
-
+ 
 def delete_birthday(user_id: str):
     col = get_birthday_col()
     if col is None:
@@ -158,9 +177,47 @@ def delete_birthday(user_id: str):
         col.delete_one({"_id": user_id})
     except Exception as e:
         print(f"⚠️ Failed to delete birthday: {e}")
-
+ 
+ 
+# ---- Filter word helpers ----
+ 
+def load_filter_words() -> list[str]:
+    col = get_filter_col()
+    if col is None:
+        return []
+    try:
+        doc = col.find_one({"_id": "filter_list"})
+        if doc and "words" in doc:
+            return doc["words"]
+        return []
+    except Exception as e:
+        print(f"⚠️ Failed to load filter words: {e}")
+        return []
+ 
+def save_filter_words():
+    col = get_filter_col()
+    if col is None:
+        return
+    try:
+        col.replace_one(
+            {"_id": "filter_list"},
+            {"_id": "filter_list", "words": FILTERED_WORDS},
+            upsert=True
+        )
+    except Exception as e:
+        print(f"⚠️ Failed to save filter words: {e}")
+ 
+def _init_filter_words():
+    """Load persisted filter words from MongoDB, merging with hardcoded defaults."""
+    saved = load_filter_words()
+    for word in saved:
+        if word not in FILTERED_WORDS:
+            FILTERED_WORDS.append(word)
+ 
+_init_filter_words()
+ 
 BIRTHDAYS: dict = load_birthdays()
-
+ 
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
@@ -172,8 +229,8 @@ NORMALIZER = str.maketrans({
     "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
     "ñ": "n",  "η": "n",
 })
-
-
+ 
+ 
 def normalize(text: str) -> str:
     text = text.lower()
     text = text.translate(NORMALIZER)
@@ -181,16 +238,29 @@ def normalize(text: str) -> str:
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     text = re.sub(r'[^a-z0-9]', '', text)
     return text
-
-
+ 
+ 
+# Words that should never be filtered even if they partially match a normalized slur
+FILTER_WHITELIST = {
+    "focus", "focused", "focusing", "refocus",
+    "classic", "classico",
+    "discuss", "discussion",
+}
+ 
+ 
 def contains_filtered_word(content: str) -> str | None:
+    # Whitelist check — skip filtering if message is a safe word
+    words_in_message = set(re.findall(r'\b\w+\b', content.lower()))
+    if words_in_message.issubset(FILTER_WHITELIST):
+        return None
+ 
     normalized = normalize(content)
     for word in FILTERED_WORDS:
         if normalize(word) in normalized:
             return word
     return None
-
-
+ 
+ 
 def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
     today = (now.month, now.day)
@@ -199,81 +269,81 @@ def get_todays_birthdays() -> list[dict]:
         for key, data in BIRTHDAYS.items()
         if (data["month"], data["day"]) == today
     ]
-
-
+ 
+ 
 # ---- Family check helpers ----
-
+ 
 def is_dad(user):
     return user.id == PARENTS["dad"]["id"] or str(user.name).lower() == PARENTS["dad"]["username"].lower()
-
+ 
 def is_mom(user):
     return user.id == PARENTS["mom"]["id"] or str(user.name).lower() == PARENTS["mom"]["username"].lower()
-
+ 
 def is_cousin_stelle(user):
     return user.id == COUSIN["cousin_stelle"]["id"] or str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
-
+ 
 def is_cousin_crois(user):
     return user.id == COUSIN["cousin_crois"]["id"] or str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
-
+ 
 def is_cousin_hyu(user):
     return user.id == COUSIN["cousin_hyu"]["id"] or str(user.name).lower() == COUSIN["cousin_hyu"]["username"].lower()
-
+ 
 def is_cousin_mimi(user):
     return user.id == COUSIN["cousin_mimi"]["id"] or str(user.name).lower() == COUSIN["cousin_mimi"]["username"].lower()
-
+ 
 def is_uncle_caco(user):
     return user.id == UNCLE["uncle_caco"]["id"] or str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
-
+ 
 def is_uncle_vari(user):
     return user.id == UNCLE["uncle_vari"]["id"] or str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
-
+ 
 def is_sister_abby(user):
     return user.id == SISTER["sister_abby"]["id"] or str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
-
+ 
 def is_sister_kde(user):
     return user.id == SISTER["sister_kde"]["id"] or str(user.name).lower() == SISTER["sister_kde"]["username"].lower()
-
+ 
 def is_sister_kio(user):
     return user.id == SISTER["sister_kio"]["id"] or str(user.name).lower() == SISTER["sister_kio"]["username"].lower()
-
+ 
 def is_broinlaw_haru(user):
     return user.id == BROTHER_IN_LAW["broinlaw_haru"]["id"] or str(user.name).lower() == BROTHER_IN_LAW["broinlaw_haru"]["username"].lower()
-
-
+ 
+ 
 # ---- Role getters ----
-
+ 
 def get_parent_role(user) -> str | None:
     if is_dad(user):  return "dad"
     if is_mom(user):  return "mom"
     return None
-
+ 
 def get_cousin_role(user) -> str | None:
     if is_cousin_stelle(user): return "cousin_stelle"
     if is_cousin_crois(user):  return "cousin_crois"
     if is_cousin_hyu(user):    return "cousin_hyu"
     if is_cousin_mimi(user):   return "cousin_mimi"
     return None
-
+ 
 def get_uncle_role(user) -> str | None:
     if is_uncle_caco(user): return "uncle_caco"
     if is_uncle_vari(user): return "uncle_vari"
     return None
-
+ 
 def get_sister_role(user) -> str | None:
     if is_sister_abby(user): return "sister_abby"
     if is_sister_kde(user):  return "sister_kde"
     if is_sister_kio(user):  return "sister_kio"
     return None
-
+ 
 def get_brother_role(user) -> str | None:
     if is_broinlaw_haru(user): return "broinlaw_haru"
     return None
-
-
+ 
+ 
 def setup_commands(bot: commands.Bot):
-
+ 
     # ---- Help ----
-
+ 
     @bot.command(name="help")
     async def help_command(ctx):
         embed = discord.Embed(
@@ -353,9 +423,9 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
-
+ 
     # ---- Filter ----
-
+ 
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
         embed = discord.Embed(
@@ -363,7 +433,7 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.red()
         )
         await ctx.send(embed=embed)
-
+ 
     @filter_group.command(name="add")
     async def filter_add(ctx, *, word: str):
         if not get_parent_role(ctx.author):
@@ -376,9 +446,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=embed)
             return
         FILTERED_WORDS.append(word)
+        save_filter_words()
         embed = discord.Embed(description=f"✅ Added `{word}` to the filter list. I'll keep an eye out. 👀", color=discord.Color.green())
         await ctx.send(embed=embed)
-
+ 
     @filter_group.command(name="remove")
     async def filter_remove(ctx, *, word: str):
         if not get_parent_role(ctx.author):
@@ -392,9 +463,10 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=embed)
             return
         FILTERED_WORDS.remove(matching[0])
+        save_filter_words()
         embed = discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green())
         await ctx.send(embed=embed)
-
+ 
     @filter_group.command(name="list")
     async def filter_list(ctx):
         if not get_parent_role(ctx.author):
@@ -413,7 +485,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(FILTERED_WORDS)} word(s) currently filtered")
         await ctx.send(embed=embed)
-
+ 
     @filter_group.command(name="clear")
     async def filter_clear(ctx):
         if not get_parent_role(ctx.author):
@@ -422,11 +494,12 @@ def setup_commands(bot: commands.Bot):
             return
         count = len(FILTERED_WORDS)
         FILTERED_WORDS.clear()
+        save_filter_words()
         embed = discord.Embed(description=f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹", color=discord.Color.green())
         await ctx.send(embed=embed)
-
+ 
     # ---- Birthday ----
-
+ 
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
         embed = discord.Embed(
@@ -441,7 +514,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text="Example: t!birthday add 03-15 → registers March 15 as your birthday")
         await ctx.send(embed=embed)
-
+ 
     @birthday_group.command(name="add")
     async def birthday_add(ctx, date: str = None):
         if not date:
@@ -467,7 +540,7 @@ def setup_commands(bot: commands.Bot):
             )
             await ctx.send(embed=embed)
             return
-
+ 
         data = {
             "month":   parsed.month,
             "day":     parsed.day,
@@ -487,7 +560,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
         await ctx.send(embed=embed)
-
+ 
     @birthday_group.command(name="remove")
     async def birthday_remove(ctx):
         key = str(ctx.author.id)
@@ -505,7 +578,7 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.green()
         )
         await ctx.send(embed=embed)
-
+ 
     @birthday_group.command(name="list")
     async def birthday_list(ctx):
         if not BIRTHDAYS:
@@ -515,15 +588,15 @@ def setup_commands(bot: commands.Bot):
             )
             await ctx.send(embed=embed)
             return
-
+ 
         sorted_entries = sorted(
             BIRTHDAYS.items(),
             key=lambda x: (x[1]["month"], x[1]["day"])
         )
-
+ 
         per_page    = 10
         total_pages = (len(sorted_entries) + per_page - 1) // per_page
-
+ 
         def build_embed(page: int) -> discord.Embed:
             start = page * per_page
             end   = start + per_page
@@ -539,17 +612,17 @@ def setup_commands(bot: commands.Bot):
             )
             embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} birthday(s) registered")
             return embed
-
+ 
         class BirthdayView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)
                 self.page = 0
                 self.update_buttons()
-
+ 
             def update_buttons(self):
                 self.prev_btn.disabled = self.page == 0
                 self.next_btn.disabled = self.page >= total_pages - 1
-
+ 
             @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
             async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user != ctx.author:
@@ -558,7 +631,7 @@ def setup_commands(bot: commands.Bot):
                 self.page -= 1
                 self.update_buttons()
                 await interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
+ 
             @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
             async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user != ctx.author:
@@ -567,7 +640,7 @@ def setup_commands(bot: commands.Bot):
                 self.page += 1
                 self.update_buttons()
                 await interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
+ 
             async def on_timeout(self):
                 for child in self.children:
                     child.disabled = True
@@ -575,10 +648,10 @@ def setup_commands(bot: commands.Bot):
                     await self.message.edit(view=self)
                 except Exception:
                     pass
-
+ 
         view         = BirthdayView()
         view.message = await ctx.send(embed=build_embed(0), view=view)
-
+ 
     @birthday_group.command(name="today")
     async def birthday_today(ctx):
         todays = get_todays_birthdays()
@@ -601,9 +674,9 @@ def setup_commands(bot: commands.Bot):
             )
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
             await ctx.send(embed=embed)
-
+ 
     # ---- Personality ----
-
+ 
     @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
     async def personality_group(ctx):
         embed = discord.Embed(
@@ -611,7 +684,7 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.blurple()
         )
         await ctx.send(embed=embed)
-
+ 
     @personality_group.command(name="add")
     async def personality_add(ctx, *, trait: str):
         if not get_parent_role(ctx.author):
@@ -626,7 +699,7 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.blurple()
         )
         await ctx.send(embed=embed)
-
+ 
     @personality_group.command(name="remove")
     async def personality_remove(ctx, index: int):
         if not get_parent_role(ctx.author):
@@ -644,7 +717,7 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.green()
         )
         await ctx.send(embed=embed)
-
+ 
     @personality_group.command(name="list")
     async def personality_list(ctx):
         from personality import CUSTOM_TRAITS
@@ -663,7 +736,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(CUSTOM_TRAITS)} custom trait(s) active")
         await ctx.send(embed=embed)
-
+ 
     @personality_group.command(name="clear")
     async def personality_clear(ctx):
         if not get_parent_role(ctx.author):
@@ -678,9 +751,9 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.green()
         )
         await ctx.send(embed=embed)
-
+ 
     # ---- General ----
-
+ 
     @bot.command(name="whoami")
     async def whoami(ctx):
         parent_role  = get_parent_role(ctx.author)
@@ -714,7 +787,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("You're my Brother in law! 🖤 Stop flirting with my sister! 💢")
         else:
             await ctx.send("Hello! valued member of this server! 😊 Not a creator, but still cool.")
-
+ 
     @bot.command(name="family")
     async def family(ctx):
         embed = discord.Embed(
@@ -736,7 +809,7 @@ def setup_commands(bot: commands.Bot):
         embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",           inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
-
+ 
     @bot.command(name="greet")
     async def greet(ctx):
         parent_role  = get_parent_role(ctx.author)
@@ -770,7 +843,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send("Brother in law! 🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢")
         else:
             await ctx.send("Heya! 👋 Good to see you around here!")
-
+ 
     @bot.command(name="ping")
     async def ping(ctx):
         latency = round(bot.latency * 1000)
