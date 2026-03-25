@@ -226,8 +226,8 @@ async def on_ready():
  
 @bot.event
 async def on_message(message):
-    if message.author.bot:
-        return  # ignore all bots including T.O.R.I.E. herself
+    if message.author == bot.user:
+        return  # ignore T.O.R.I.E.'s own messages only
  
     # Filter check — runs on every message
     if contains_filtered_word(message.content):
@@ -258,40 +258,40 @@ async def on_message(message):
             sister_role  = get_sister_role(message.author)
             brother_role = get_brother_role(message.author)
             if parent_role == "dad":
-                await message.channel.send("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇")
+                await message.reply("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇", mention_author=False)
                 return
             elif parent_role == "mom":
-                await message.channel.send("Mom! 💙 You're here! I've been on my best behavior, I promise.")
+                await message.reply("Mom! 💙 You're here! I've been on my best behavior, I promise.", mention_author=False)
                 return
             elif cousin_role == "cousin_stelle":
-                await message.channel.send("Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨")
+                await message.reply("Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨", mention_author=False)
                 return
             elif cousin_role == "cousin_crois":
-                await message.channel.send("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄")
+                await message.reply("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄", mention_author=False)
                 return
             elif cousin_role == "cousin_hyu":
-                await message.channel.send("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑")
+                await message.reply("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑", mention_author=False)
                 return
             elif cousin_role == "cousin_mimi":
-                await message.channel.send("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤")
+                await message.reply("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤", mention_author=False)
                 return
             elif uncle_role == "uncle_caco":
-                await message.channel.send("The GOAT! 🐐 You're here! What goated things will we do today? 😎")
+                await message.reply("The GOAT! 🐐 You're here! What goated things will we do today? 😎", mention_author=False)
                 return
             elif uncle_role == "uncle_vari":
-                await message.channel.send("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥")
+                await message.reply("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥", mention_author=False)
                 return
             elif sister_role == "sister_abby":
-                await message.channel.send("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜")
+                await message.reply("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜", mention_author=False)
                 return
             elif sister_role == "sister_kde":
-                await message.channel.send("Kde! 🩷 What crazy thing shall we do today? 💖")
+                await message.reply("Kde! 🩷 What crazy thing shall we do today? 💖", mention_author=False)
                 return
             elif sister_role == "sister_kio":
-                await message.channel.send("Kio! 🎤 What song are we singing today? 🎶")
+                await message.reply("Kio! 🎤 What song are we singing today? 🎶", mention_author=False)
                 return
             elif brother_role == "broinlaw_haru":
-                await message.channel.send("🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢")
+                await message.reply("🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢", mention_author=False)
                 return
  
         # Sticker
@@ -305,7 +305,7 @@ async def on_message(message):
                 except Exception as e:
                     print(f"❌ Sticker error: {e}")
                     reply = "Oh a sticker! Bold choice. 👀"
-            await message.channel.send(reply)
+            await message.reply(reply, mention_author=False)
             return
  
         # Image
@@ -325,12 +325,12 @@ async def on_message(message):
                     except Exception as e:
                         print(f"❌ Vision error: {e}")
                         reply = "I tried to look but something went blurry. 👀 Try again?"
-                await message.channel.send(reply)
+                await message.reply(reply, mention_author=False)
                 return
  
         # Empty mention with no special role
         if not clean_msg:
-            await message.channel.send("Hey! You mentioned me — what do you need? 😊")
+            await message.reply("Hey! You mentioned me — what do you need? 😊", mention_author=False)
             return
  
         # ---- Mute / Unmute via mention ----
@@ -577,7 +577,7 @@ async def on_message(message):
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
  
-        await message.channel.send(reply)
+        await message.reply(reply, mention_author=False)
  
  
 @bot.event
