@@ -305,7 +305,7 @@ async def on_message(message):
                 except Exception as e:
                     print(f"❌ Sticker error: {e}")
                     reply = "Oh a sticker! Bold choice. 👀"
-            await message.reply(reply, mention_author=False)
+            await message.reply(reply, mention_author=True)
             return
  
         # Image
@@ -325,7 +325,7 @@ async def on_message(message):
                     except Exception as e:
                         print(f"❌ Vision error: {e}")
                         reply = "I tried to look but something went blurry. 👀 Try again?"
-                await message.reply(reply, mention_author=False)
+                await message.reply(reply, mention_author=True)
                 return
  
         # Empty mention with no special role
@@ -577,7 +577,7 @@ async def on_message(message):
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
  
-        await message.reply(reply, mention_author=False)
+        await message.reply(reply, mention_author=True)
  
  
 @bot.event
