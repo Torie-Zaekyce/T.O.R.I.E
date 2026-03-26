@@ -428,7 +428,8 @@ async def on_message(message):
                         color       = discord.Color.red()
                     )
                     mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
-                    await muted_ch.send(embed=mute_embed)
+                    mute_msg = await muted_ch.send(embed=mute_embed)
+                    await mute_msg.delete(delay=180)
  
                 async def auto_unmute(member, role, seconds, ch):
                     await asyncio.sleep(seconds)
@@ -442,7 +443,8 @@ async def on_message(message):
                                 description = f"🔊 {member.mention} your mute has expired. You can now chat again!",
                                 color       = discord.Color.green()
                             )
-                            await ch.send(embed=muted_done_embed)
+                            done_msg = await ch.send(embed=muted_done_embed)
+                            await done_msg.delete(delay=180)
  
                         # Announce in general chat that the user is back
                         gen_channel = bot.get_channel(GENERAL_CHANNEL)
@@ -498,7 +500,8 @@ async def on_message(message):
                         description = f"🔊 {target.mention} has been unmuted early. Welcome back!",
                         color       = discord.Color.green()
                     )
-                    await muted_ch.send(embed=done_embed)
+                    done_msg = await muted_ch.send(embed=done_embed)
+                    await done_msg.delete(delay=180)
  
             except discord.Forbidden:
                 embed = discord.Embed(description="⛔ I don't have permission to unmute that user.", color=discord.Color.red())
