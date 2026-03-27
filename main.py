@@ -147,6 +147,34 @@ class Torie(ToriePersonality):
 torie = Torie()
  
  
+from datetime import timedelta as _td
+ 
+# ---- Module-level helpers ----
+ 
+_DURATION_PATTERNS = [
+    (re.compile(r"(\d+)\s*s(?:ec(?:ond)?s?)?", re.I), "seconds"),
+    (re.compile(r"(\d+)\s*m(?:in(?:ute)?s?)?", re.I), "minutes"),
+    (re.compile(r"(\d+)\s*h(?:(?:ou)?rs?)?",   re.I), "hours"),
+    (re.compile(r"(\d+)\s*d(?:ays?)?",         re.I), "days"),
+    (re.compile(r"(\d+)\s*w(?:eeks?)?",        re.I), "weeks"),
+]
+ 
+def parse_duration(text: str) -> _td | None:
+    kwargs = {}
+    for pattern, unit in _DURATION_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            kwargs[unit] = int(m.group(1))
+    return _td(**kwargs) if kwargs else None
+ 
+def can_moderate(user) -> bool:
+    return bool(
+        get_parent_role(user) or get_uncle_role(user) or
+        get_sister_role(user) or get_brother_role(user) or
+        get_cousin_role(user)
+    )
+ 
+ 
 def sanitize_input(text: str) -> tuple[str | None, str | None]:
     if len(text) > MAX_MESSAGE_LENGTH:
         return None, "too_long"
@@ -252,46 +280,29 @@ async def on_message(message):
  
         # Empty mention — family special greetings
         if not clean_msg and not message.stickers and not message.attachments:
-            parent_role  = get_parent_role(message.author)
-            cousin_role  = get_cousin_role(message.author)
-            uncle_role   = get_uncle_role(message.author)
-            sister_role  = get_sister_role(message.author)
-            brother_role = get_brother_role(message.author)
-            if parent_role == "dad":
-                await message.reply("Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇", mention_author=False)
-                return
-            elif parent_role == "mom":
-                await message.reply("Mom! 💙 You're here! I've been on my best behavior, I promise.", mention_author=False)
-                return
-            elif cousin_role == "cousin_stelle":
-                await message.reply("Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨", mention_author=False)
-                return
-            elif cousin_role == "cousin_crois":
-                await message.reply("Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄", mention_author=False)
-                return
-            elif cousin_role == "cousin_hyu":
-                await message.reply("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑", mention_author=False)
-                return
-            elif cousin_role == "cousin_mimi":
-                await message.reply("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤", mention_author=False)
-                return
-            elif uncle_role == "uncle_caco":
-                await message.reply("The GOAT! 🐐 You're here! What goated things will we do today? 😎", mention_author=False)
-                return
-            elif uncle_role == "uncle_vari":
-                await message.reply("Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥", mention_author=False)
-                return
-            elif sister_role == "sister_abby":
-                await message.reply("Abby! 🧀 My Big Sister! What puns are we cooking today? 📜", mention_author=False)
-                return
-            elif sister_role == "sister_kde":
-                await message.reply("Kde! 🩷 What crazy thing shall we do today? 💖", mention_author=False)
-                return
-            elif sister_role == "sister_kio":
-                await message.reply("Kio! 🎤 What song are we singing today? 🎶", mention_author=False)
-                return
-            elif brother_role == "broinlaw_haru":
-                await message.reply("🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢", mention_author=False)
+            _GREETINGS = {
+                "dad":           "Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇",
+                "mom":           "Mom! 💙 You're here! I've been on my best behavior, I promise.",
+                "cousin_stelle": "Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨",
+                "cousin_crois":  "Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄",
+                "cousin_hyu":    "Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑",
+                "cousin_mimi":   "Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤",
+                "uncle_caco":    "The GOAT! 🐐 You're here! What goated things will we do today? 😎",
+                "uncle_vari":    "Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥",
+                "sister_abby":   "Abby! 🧀 My Big Sister! What puns are we cooking today? 📜",
+                "sister_kde":    "Kde! 🩷 What crazy thing shall we do today? 💖",
+                "sister_kio":    "Kio! 🎤 What song are we singing today? 🎶",
+                "broinlaw_haru": "🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢",
+            }
+            role_key = (
+                get_parent_role(message.author) or
+                get_cousin_role(message.author) or
+                get_uncle_role(message.author) or
+                get_sister_role(message.author) or
+                get_brother_role(message.author)
+            )
+            if role_key in _GREETINGS:
+                await message.reply(_GREETINGS[role_key], mention_author=False)
                 return
  
         # Sticker
@@ -305,7 +316,7 @@ async def on_message(message):
                 except Exception as e:
                     print(f"❌ Sticker error: {e}")
                     reply = "Oh a sticker! Bold choice. 👀"
-            await message.reply(reply, mention_author=True)
+            await message.reply(reply, mention_author=False)
             return
  
         # Image
@@ -325,7 +336,7 @@ async def on_message(message):
                     except Exception as e:
                         print(f"❌ Vision error: {e}")
                         reply = "I tried to look but something went blurry. 👀 Try again?"
-                await message.reply(reply, mention_author=True)
+                await message.reply(reply, mention_author=False)
                 return
  
         # Empty mention with no special role
@@ -335,37 +346,11 @@ async def on_message(message):
  
         # ---- Mute / Unmute via mention ----
  
-        def parse_duration(text: str):
-            import re as _re
-            from datetime import timedelta
-            patterns = {
-                _re.compile(r"(\d+)\s*s(?:ec(?:ond)?s?)?", _re.I): "seconds",
-                _re.compile(r"(\d+)\s*m(?:in(?:ute)?s?)?", _re.I): "minutes",
-                _re.compile(r"(\d+)\s*h(?:(?:ou)?rs?)?",   _re.I): "hours",
-                _re.compile(r"(\d+)\s*d(?:ays?)?",         _re.I): "days",
-                _re.compile(r"(\d+)\s*w(?:eeks?)?",        _re.I): "weeks",
-            }
-            kwargs = {}
-            for pattern, unit in patterns.items():
-                m = pattern.search(text)
-                if m:
-                    kwargs[unit] = int(m.group(1))
-            return timedelta(**kwargs) if kwargs else None
- 
         lowered = clean_msg.lower()
         targets = [u for u in message.mentions if u != bot.user]
  
         mute_intent   = bool(re.search(r'\bmute\b', lowered)) and not re.search(r'\bunmute\b', lowered)
         unmute_intent = bool(re.search(r'\bunmute\b', lowered))
- 
-        def can_moderate(user):
-            return (
-                get_parent_role(user) or
-                get_uncle_role(user)  or
-                get_sister_role(user) or
-                get_brother_role(user) or
-                get_cousin_role(user)
-            )
  
         if targets and mute_intent:
             if not can_moderate(message.author):
@@ -374,7 +359,6 @@ async def on_message(message):
                 return
             target   = targets[0]
             duration = parse_duration(clean_msg)
-            from datetime import timedelta as _td
             if not duration:
                 duration = _td(minutes=10)
                 default  = True
@@ -525,38 +509,29 @@ async def on_message(message):
         # Text — inject family context + mentioned users
         async with message.channel.typing():
             try:
-                parent_role  = get_parent_role(message.author)
-                cousin_role  = get_cousin_role(message.author)
-                uncle_role   = get_uncle_role(message.author)
-                sister_role  = get_sister_role(message.author)
-                brother_role = get_brother_role(message.author)
- 
-                if parent_role == "dad":
-                    contexted_msg = f"[Note: This message is from your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-                elif parent_role == "mom":
-                    contexted_msg = f"[Note: This message is from your Mom, Nico. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif cousin_role == "cousin_stelle":
-                    contexted_msg = f"[Note: This message is from your Cousin, Stelle. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif cousin_role == "cousin_crois":
-                    contexted_msg = f"[Note: This message is from your Cousin, Crois. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif cousin_role == "cousin_hyu":
-                    contexted_msg = f"[Note: This message is from your Cousin, Hyuluk. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif cousin_role == "cousin_mimi":
-                    contexted_msg = f"[Note: This message is from your Cousin, Mimi. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif uncle_role == "uncle_caco":
-                    contexted_msg = f"[Note: This message is from your Uncle, Cacolate. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-                elif uncle_role == "uncle_vari":
-                    contexted_msg = f"[Note: This message is from your Uncle, Vari. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-                elif sister_role == "sister_abby":
-                    contexted_msg = f"[Note: This message is from your Big Sister, Abby. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
-                elif sister_role == "sister_kde":
-                    contexted_msg = f"[Note: This message is from your Big Sister, Kde. Treat her with extra cheekiness and warmth.]\n{clean_msg}"
-                elif sister_role == "sister_kio":
-                    contexted_msg = f"[Note: This message is from your Sister, Kio. Treat her with extra warmth and love.]\n{clean_msg}"
-                elif brother_role == "broinlaw_haru":
-                    contexted_msg = f"[Note: This message is from your Brother In Law, Haru. Treat him with extra cheekiness and warmth.]\n{clean_msg}"
-                else:
-                    contexted_msg = clean_msg
+                _CONTEXT_NOTES = {
+                    "dad":           "your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.",
+                    "mom":           "your Mom, Nico. Treat her with extra warmth and love.",
+                    "cousin_stelle": "your Cousin, Stelle. Treat her with extra warmth and love.",
+                    "cousin_crois":  "your Cousin, Crois. Treat her with extra warmth and love.",
+                    "cousin_hyu":    "your Cousin, Hyuluk. Treat her with extra warmth and love.",
+                    "cousin_mimi":   "your Cousin, Mimi. Treat her with extra warmth and love.",
+                    "uncle_caco":    "your Uncle, Cacolate. Treat him with extra cheekiness and warmth.",
+                    "uncle_vari":    "your Uncle, Vari. Treat him with extra cheekiness and warmth.",
+                    "sister_abby":   "your Big Sister, Abby. Treat her with extra cheekiness and warmth.",
+                    "sister_kde":    "your Big Sister, Kde. Treat her with extra cheekiness and warmth.",
+                    "sister_kio":    "your Sister, Kio. Treat her with extra warmth and love.",
+                    "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
+                }
+                role_key = (
+                    get_parent_role(message.author) or
+                    get_cousin_role(message.author) or
+                    get_uncle_role(message.author) or
+                    get_sister_role(message.author) or
+                    get_brother_role(message.author)
+                )
+                note = _CONTEXT_NOTES.get(role_key)
+                contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
  
                 mentioned = [u for u in message.mentions if u != bot.user]
                 if mentioned:
@@ -580,7 +555,7 @@ async def on_message(message):
                 print(f"❌ Generation error: {e}")
                 reply = "Hmm, my brain glitched. Try again? 😅"
  
-        await message.reply(reply, mention_author=True)
+        await message.reply(reply, mention_author=False)
  
  
 @bot.event
