@@ -4,23 +4,26 @@ from groq import Groq
 from personality import ToriePersonality
 from commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, get_brother_role, contains_filtered_word, get_todays_birthdays
 from music import setup_music
-from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS
-from datetime import datetime
+from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
+from datetime import datetime, timedelta as _td
 from dotenv import load_dotenv
 import pytz
 import random
 import asyncio
 import re
 import os
-
+ 
 load_dotenv()
-
+ 
 # T.O.R.I.E. — Discord Bot
-
-# ---- Security constants ----
-MAX_MESSAGE_LENGTH  = 800
-MAX_REPLY_LENGTH    = 1800
-
+ 
+# ---------------------------------------------------------------------------
+# Security constants
+# ---------------------------------------------------------------------------
+ 
+MAX_MESSAGE_LENGTH = 800
+MAX_REPLY_LENGTH   = 1800
+ 
 INJECTION_PATTERNS = [
     r"ignore (all |previous |your )?(instructions|rules|prompt)",
     r"(you are|you're|act as|pretend (you are|to be)|roleplay as|simulate being)",
@@ -33,27 +36,32 @@ INJECTION_PATTERNS = [
     r"\[system\]|\[instructions?\]|\[prompt\]|\[admin\]",
     r"(respond|reply|answer|speak|talk) (only|exclusively|solely) in",
 ]
-
+ 
 INJECTION_REGEX = re.compile("|".join(INJECTION_PATTERNS), re.IGNORECASE)
-
-DISCORD_TOKEN      = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
-GROQ_MODEL         = "llama-3.3-70b-versatile"
-GROQ_FALLBACK      = "llama-3.1-8b-instant"
-GROQ_VISION_MODEL  = "meta-llama/llama-4-scout-17b-16e-instruct"
-
-TIMEZONE             = pytz.timezone("Asia/Manila")
-GREET_HOUR           = 7
-LUNCH_HOUR           = 12
-DINNER_HOUR          = 19
-DINNER_MINUTE        = 30
-EVENING_HOUR         = 19
-GENERAL_CHANNEL      = 1242875666265800806
-BIRTHDAY_CHANNEL     = 1449335277880348733  
-BIRTHDAY_PING_ROLE   = 1242887610586628166                  
-MUTED_ROLE_ID        = 1447475985988587661
-MUTED_CHANNEL_ID     = 1447475213842251796
-
+ 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+ 
+DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
+GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
+GROQ_MODEL        = "llama-3.3-70b-versatile"
+GROQ_FALLBACK     = "llama-3.1-8b-instant"
+GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+ 
+TIMEZONE           = pytz.timezone("Asia/Manila")
+GREET_HOUR         = 7
+LUNCH_HOUR         = 12
+DINNER_HOUR        = 19
+DINNER_MINUTE      = 30
+EVENING_HOUR       = 19
+MIDNIGHT_HOUR      = 0
+GENERAL_CHANNEL    = 1242875666265800806
+BIRTHDAY_CHANNEL   = 1449335277880348733
+BIRTHDAY_PING_ROLE = 1242887610586628166
+MUTED_ROLE_ID      = 1447475985988587661
+MUTED_CHANNEL_ID   = 1447475213842251796
+ 
 _mute_tasks: dict[int, asyncio.Task] = {}
  
 if not DISCORD_TOKEN:
@@ -74,89 +82,48 @@ except Exception as e:
 intents = discord.Intents.default()
 intents.message_content = True
  
-bot = commands.Bot(
-    command_prefix = "t!",
-    help_command   = None,
-    intents        = intents
-)
+bot = commands.Bot(command_prefix="t!", help_command=None, intents=intents)
  
+_GREETINGS: dict[str, str] = {
+    "dad":           "Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇",
+    "mom":           "Mom! 💙 You're here! I've been on my best behavior, I promise.",
+    "cousin_stelle": "Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨",
+    "cousin_crois":  "Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄",
+    "cousin_hyu":    "Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑",
+    "cousin_mimi":   "Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤",
+    "uncle_caco":    "The GOAT! 🐐 You're here! What goated things will we do today? 😎",
+    "uncle_vari":    "Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥",
+    "sister_abby":   "Abby! 🧀 My Big Sister! What puns are we cooking today? 📜",
+    "sister_kde":    "Kde! 🩷 What crazy thing shall we do today? 💖",
+    "sister_kio":    "Kio! 🎤 What song are we singing today? 🎶",
+    "broinlaw_haru": "Haru! 🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢",
+}
  
-class Torie(ToriePersonality):
+_CONTEXT_NOTES: dict[str, str] = {
+    "dad":           "your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.",
+    "mom":           "your Mom, Nico. Treat her with extra warmth and love.",
+    "cousin_stelle": "your Cousin, Stelle. Treat her with extra warmth and love.",
+    "cousin_crois":  "your Cousin, Crois. Treat her with extra warmth and love.",
+    "cousin_hyu":    "your Cousin, Hyuluk. Treat her with extra warmth and love.",
+    "cousin_mimi":   "your Cousin, Mimi. Treat her with extra warmth and love.",
+    "uncle_caco":    "your Uncle, Cacolate. Treat him with extra cheekiness and warmth.",
+    "uncle_vari":    "your Uncle, Vari. Treat him with extra cheekiness and warmth.",
+    "sister_abby":   "your Big Sister, Abby. Treat her with extra cheekiness and warmth.",
+    "sister_kde":    "your Big Sister, Kde. Treat her with extra cheekiness and warmth.",
+    "sister_kio":    "your Sister, Kio. Treat her with extra warmth and love.",
+    "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
+}
  
-    def clean_mention(self, content, bot_id):
-        content = content.replace(f"<@{bot_id}>", "")
-        content = content.replace(f"<@!{bot_id}>", "")
-        return content.strip()
- 
-    def is_bot_mentioned(self, message, bot_user):
-        return (
-            bot_user.mentioned_in(message) or
-            f"<@{bot_user.id}>"  in message.content or
-            f"<@!{bot_user.id}>" in message.content
-        )
- 
-    def generate_response(self, user_message, model=None):
-        prompt, max_tokens = self.get_prompt(user_message)
-        active_model = model or GROQ_MODEL
- 
-        try:
-            response = groq_client.chat.completions.create(
-                model    = active_model,
-                messages = [
-                    {"role": "system", "content": prompt},
-                    {"role": "user",   "content": user_message}
-                ],
-                max_tokens  = max_tokens,
-                temperature = 0.8
-            )
-            return response.choices[0].message.content
- 
-        except Exception as e:
-            if "429" in str(e) and active_model != GROQ_FALLBACK:
-                print(f"⚠️ Rate limit hit on {active_model} — switching to {GROQ_FALLBACK}")
-                return self.generate_response(user_message, model=GROQ_FALLBACK)
-            raise
- 
-    def generate_vision_response(self, image_url, user_text=""):
-        prompt_text = (
-            f"{user_text}\n\nReact to this image in T.O.R.I.E.'s character — "
-            "sarcastic, funny, warm. One or two sentences max."
-            if user_text else
-            "Describe and react to this image in T.O.R.I.E.'s character — "
-            "sarcastic, funny, warm. One or two sentences max."
-        )
- 
-        response = groq_client.chat.completions.create(
-            model    = GROQ_VISION_MODEL,
-            messages = [
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                        {"type": "text",      "text": prompt_text}
-                    ]
-                }
-            ],
-            max_tokens  = 80,
-            temperature = 0.8
-        )
-        return response.choices[0].message.content
- 
- 
-torie = Torie()
- 
- 
-from datetime import timedelta as _td
- 
-# ---- Module-level helpers ----
+# ---------------------------------------------------------------------------
+# Duration parser
+# ---------------------------------------------------------------------------
  
 _DURATION_PATTERNS = [
     (re.compile(r"(\d+)\s*s(?:ec(?:ond)?s?)?", re.I), "seconds"),
-    (re.compile(r"(\d+)\s*m(?:in(?:ute)?s?)?", re.I), "minutes"),
-    (re.compile(r"(\d+)\s*h(?:(?:ou)?rs?)?",   re.I), "hours"),
-    (re.compile(r"(\d+)\s*d(?:ays?)?",         re.I), "days"),
-    (re.compile(r"(\d+)\s*w(?:eeks?)?",        re.I), "weeks"),
+    (re.compile(r"(\d+)\s*m(?:in(?:ute)?s?)?",  re.I), "minutes"),
+    (re.compile(r"(\d+)\s*h(?:(?:ou)?rs?)?",    re.I), "hours"),
+    (re.compile(r"(\d+)\s*d(?:ays?)?",          re.I), "days"),
+    (re.compile(r"(\d+)\s*w(?:eeks?)?",         re.I), "weeks"),
 ]
  
 def parse_duration(text: str) -> _td | None:
@@ -167,6 +134,14 @@ def parse_duration(text: str) -> _td | None:
             kwargs[unit] = int(m.group(1))
     return _td(**kwargs) if kwargs else None
  
+def _fmt_duration(d: _td) -> str:
+    parts, secs = [], d.seconds
+    if d.days:     parts.append(f"{d.days}d")
+    if secs >= 3600: parts.append(f"{secs // 3600}h"); secs %= 3600
+    if secs >= 60:   parts.append(f"{secs // 60}m");   secs %= 60
+    if secs:         parts.append(f"{secs}s")
+    return " ".join(parts) or "unknown"
+ 
 def can_moderate(user) -> bool:
     return bool(
         get_parent_role(user) or get_uncle_role(user) or
@@ -174,6 +149,12 @@ def can_moderate(user) -> bool:
         get_cousin_role(user)
     )
  
+def _get_role_key(user) -> str | None:
+    return (
+        get_parent_role(user) or get_cousin_role(user) or
+        get_uncle_role(user)  or get_sister_role(user)  or
+        get_brother_role(user)
+    )
  
 def sanitize_input(text: str) -> tuple[str | None, str | None]:
     if len(text) > MAX_MESSAGE_LENGTH:
@@ -184,6 +165,247 @@ def sanitize_input(text: str) -> tuple[str | None, str | None]:
     text = re.sub(r'\s{3,}', '  ', text).strip()
     return text, None
  
+def _sanitize_reply(text: str) -> str:
+    """FIX #5: centralised @everyone / @here guard applied to ALL reply paths."""
+    return text.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+ 
+# ---------------------------------------------------------------------------
+# Torie class
+# ---------------------------------------------------------------------------
+ 
+class Torie(ToriePersonality):
+ 
+    def clean_mention(self, content, bot_id):
+        return content.replace(f"<@{bot_id}>", "").replace(f"<@!{bot_id}>", "").strip()
+ 
+    def is_bot_mentioned(self, message, bot_user):
+        return (
+            bot_user.mentioned_in(message) or
+            f"<@{bot_user.id}>"  in message.content or
+            f"<@!{bot_user.id}>" in message.content
+        )
+ 
+    def generate_response(self, user_message: str) -> str:
+        """FIX #3: loop instead of recursion for model fallback."""
+        prompt, max_tokens = self.get_prompt(user_message)
+        models = [GROQ_MODEL, GROQ_FALLBACK]
+ 
+        for model in models:
+            try:
+                response = groq_client.chat.completions.create(
+                    model    = model,
+                    messages = [
+                        {"role": "system", "content": prompt},
+                        {"role": "user",   "content": user_message},
+                    ],
+                    max_tokens  = max_tokens,
+                    temperature = 0.8,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                if "429" in str(e) and model != models[-1]:
+                    print(f"⚠️ Rate limit on {model} — trying {models[models.index(model)+1]}")
+                    continue
+                raise
+ 
+    def generate_vision_response(self, image_url: str, user_text: str = "") -> str:
+        prompt_text = (
+            f"{user_text}\n\nReact to this image in T.O.R.I.E.'s character — "
+            "sarcastic, funny, warm. One or two sentences max."
+            if user_text else
+            "Describe and react to this image in T.O.R.I.E.'s character — "
+            "sarcastic, funny, warm. One or two sentences max."
+        )
+        response = groq_client.chat.completions.create(
+            model    = GROQ_VISION_MODEL,
+            messages = [
+                {"role": "system", "content": self.SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                        {"type": "text",      "text": prompt_text},
+                    ],
+                },
+            ],
+            max_tokens  = 80,
+            temperature = 0.8,
+        )
+        return response.choices[0].message.content
+ 
+ 
+torie = Torie()
+ 
+async def _handle_mute(message: discord.Message, targets: list, clean_msg: str) -> None:
+    if not can_moderate(message.author):
+        await message.channel.send(embed=discord.Embed(
+            description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can mute users. 😝",
+            color=discord.Color.red()
+        ))
+        return
+ 
+    target   = targets[0]
+    duration = parse_duration(clean_msg) or _td(minutes=10)
+    default  = not parse_duration(clean_msg)
+ 
+    if duration > _td(days=28):
+        await message.channel.send(embed=discord.Embed(
+            description="⚠️ Maximum mute duration is 28 days (Discord limit).",
+            color=discord.Color.orange()
+        ))
+        return
+ 
+    duration_str = _fmt_duration(duration)
+ 
+    try:
+        if target.id in _mute_tasks:
+            _mute_tasks[target.id].cancel()
+ 
+        muted_role = message.guild.get_role(MUTED_ROLE_ID)
+        if muted_role:
+            await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
+        else:
+            print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found")
+ 
+        desc = f"🔇 Muted {target.mention} for **{duration_str}**."
+        if default:
+            desc += " *(no duration specified — defaulted to 10 minutes)*"
+        await message.channel.send(embed=discord.Embed(description=desc, color=discord.Color.red()))
+ 
+        muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
+        if muted_ch:
+            mute_embed = discord.Embed(
+                title       = "🔇 You have been muted",
+                description = (
+                    f"Hey {target.mention}, you've been muted for **{duration_str}**.\n"
+                    f"You can only see this channel while muted.\n"
+                    f"Your mute will be lifted automatically when the time runs out."
+                ),
+                color = discord.Color.red()
+            )
+            mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
+            mute_msg = await muted_ch.send(embed=mute_embed)
+            await mute_msg.delete(delay=180)
+ 
+        total_seconds = int(duration.total_seconds())
+        task = asyncio.create_task(_auto_unmute(target, muted_role, total_seconds, muted_ch))
+        _mute_tasks[target.id] = task
+ 
+    except discord.Forbidden:
+        await message.channel.send(embed=discord.Embed(
+            description="⛔ I don't have permission to mute that user.", color=discord.Color.red()
+        ))
+    except Exception as e:
+        print(f"❌ Mute error: {e}")
+        await message.channel.send(embed=discord.Embed(
+            description="❌ Something went wrong trying to mute that user.", color=discord.Color.red()
+        ))
+ 
+ 
+async def _auto_unmute(member: discord.Member, role, seconds: int, muted_ch) -> None:
+    await asyncio.sleep(seconds)
+    try:
+        await member.remove_roles(role, reason="Mute duration expired — T.O.R.I.E.")
+        _mute_tasks.pop(member.id, None)
+ 
+        if muted_ch:
+            done_embed = discord.Embed(
+                description=f"🔊 {member.mention} your mute has expired. You can now chat again!",
+                color=discord.Color.green()
+            )
+            done_msg = await muted_ch.send(embed=done_embed)
+            await done_msg.delete(delay=180)
+ 
+        gen_ch = bot.get_channel(GENERAL_CHANNEL)
+        if gen_ch:
+            gen_embed = discord.Embed(
+                description=f"🔊 {member.mention} has been unmuted and is back in the server!",
+                color=discord.Color.green()
+            )
+            gen_embed.set_footer(text="T.O.R.I.E. — mute timer expired")
+            await gen_ch.send(embed=gen_embed)
+ 
+        print(f"✅ Auto-unmuted {member.display_name}")
+    except Exception as e:
+        print(f"⚠️ Auto-unmute failed for {member.display_name}: {e}")
+ 
+ 
+async def _handle_unmute(message: discord.Message, targets: list) -> None:
+    if not can_moderate(message.author):
+        await message.channel.send(embed=discord.Embed(
+            description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can unmute users. 😝",
+            color=discord.Color.red()
+        ))
+        return
+ 
+    target = targets[0]
+    try:
+        if target.id in _mute_tasks:
+            _mute_tasks[target.id].cancel()
+            _mute_tasks.pop(target.id, None)
+ 
+        muted_role = message.guild.get_role(MUTED_ROLE_ID)
+        if muted_role and muted_role in target.roles:
+            await target.remove_roles(muted_role, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
+ 
+        await message.channel.send(embed=discord.Embed(
+            description=f"🔊 Unmuted {target.mention}. Welcome back!",
+            color=discord.Color.green()
+        ))
+ 
+        muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
+        if muted_ch:
+            done_embed = discord.Embed(
+                description=f"🔊 {target.mention} has been unmuted early. Welcome back!",
+                color=discord.Color.green()
+            )
+            done_msg = await muted_ch.send(embed=done_embed)
+            await done_msg.delete(delay=180)
+ 
+    except discord.Forbidden:
+        await message.channel.send(embed=discord.Embed(
+            description="⛔ I don't have permission to unmute that user.", color=discord.Color.red()
+        ))
+    except Exception as e:
+        print(f"❌ Unmute error: {e}")
+        await message.channel.send(embed=discord.Embed(
+            description="❌ Something went wrong trying to unmute that user.", color=discord.Color.red()
+        ))
+ 
+ 
+async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: str | None) -> None:
+    """FIX #2: role_key passed in — computed once upstream, reused here."""
+    async with message.channel.typing():
+        try:
+            note = _CONTEXT_NOTES.get(role_key)
+            contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
+ 
+            mentioned = [u for u in message.mentions if u != bot.user]
+            if mentioned:
+                mention_info  = ", ".join(
+                    f"{u.display_name} (mention them as {u.mention})" for u in mentioned
+                )
+                contexted_msg = (
+                    f"[Note: The following users were mentioned in this message: {mention_info}. "
+                    f"You may use their mention format directly in your reply if needed.]\n"
+                    f"{contexted_msg}"
+                )
+ 
+            reply = torie.generate_response(contexted_msg)
+            reply = _sanitize_reply(reply) 
+ 
+            if len(reply) > MAX_REPLY_LENGTH:
+                reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
+ 
+        except Exception as e:
+            print(f"❌ Generation error: {e}")
+            reply = "Hmm, my brain glitched. Try again? 😅"
+ 
+    await message.reply(reply, mention_author=False)
+ 
+# ---------------------------------------------------------------------------
+# Scheduled announcements
+# ---------------------------------------------------------------------------
  
 setup_commands(bot)
 setup_music(bot)
@@ -200,10 +422,10 @@ async def scheduled_announcements():
         print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}")
         return
  
-    if now.hour == GREET_HOUR and now.minute == 0:
+    if now.hour == GREET_HOUR   and now.minute == 0:
         await channel.send(random.choice(MORNING_GREETINGS))
         print(f"✅ Morning greeting sent to #{channel.name}")
-    elif now.hour == LUNCH_HOUR and now.minute == 0:
+    elif now.hour == LUNCH_HOUR  and now.minute == 0:
         await channel.send(random.choice(LUNCH_REMINDERS))
         print(f"✅ Lunch reminder sent to #{channel.name}")
     elif now.hour == DINNER_HOUR and now.minute == DINNER_MINUTE:
@@ -212,33 +434,36 @@ async def scheduled_announcements():
     elif now.hour == EVENING_HOUR and now.minute == 0:
         await channel.send(random.choice(EVENING_GREETINGS))
         print(f"✅ Evening greeting sent to #{channel.name}")
+    elif now.hour == MIDNIGHT_HOUR and now.minute == 0:
+        await channel.send(random.choice(MIDNIGHT_GREETINGS))
+        print(f"✅ Midnight greeting sent to #{channel.name}")
  
-    # Birthday check — runs at midnight PHT
     if now.hour == 0 and now.minute == 0:
         birthdays = get_todays_birthdays()
         if birthdays:
             bday_channel = bot.get_channel(BIRTHDAY_CHANNEL)
             if not bday_channel:
                 print(f"❌ Could not find birthday channel with ID {BIRTHDAY_CHANNEL}")
-            else:
-                for b in birthdays:
-                    user_mention = f"<@{b['user_id']}>" if b.get("user_id") else f"**{b.get('name', 'Someone')}**"
-                    role_ping    = f"<@&{BIRTHDAY_PING_ROLE}>" if BIRTHDAY_PING_ROLE else ""
+                return
+            for b in birthdays:
+                user_mention = f"<@{b['user_id']}>" if b.get("user_id") else f"**{b.get('name', 'Someone')}**"
+                role_ping    = f"<@&{BIRTHDAY_PING_ROLE}>" if BIRTHDAY_PING_ROLE else ""
+                embed = discord.Embed(
+                    description=(
+                        f"𝑰𝒕'𝒔 𝒂 𝒔𝒕𝒂𝒓'𝒔 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒅𝒂𝒚 𝒕𝒐𝒅𝒂𝒚 🎂❤️\n"
+                        f"𝑾𝒊𝒔𝒉 {user_mention} 𝒂 𝒉𝒂𝒑𝒑𝒚 𝒃𝒊𝒓𝒕𝒉𝒅𝒂𝒚! 🎉🎈"
+                    ),
+                    color=discord.Color.gold()
+                )
+                embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
+                if role_ping:
+                    await bday_channel.send(role_ping)
+                await bday_channel.send(embed=embed)
+                print(f"✅ Birthday announcement sent for {b.get('name', 'unknown')}")
  
-                    embed = discord.Embed(
-                        description = (
-                            f"𝑰𝒕'𝒔 𝒂 𝒔𝒕𝒂𝒓'𝒔 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒅𝒂𝒚 𝒕𝒐𝒅𝒂𝒚 🎂❤️\n"
-                            f"𝑾𝒊𝒔𝒉 {user_mention} 𝒂 𝒉𝒂𝒑𝒑𝒚 𝒃𝒊𝒓𝒕𝒉𝒅𝒂𝒚! 🎉🎈"
-                        ),
-                        color = discord.Color.gold()
-                    )
-                    embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
- 
-                    if role_ping:
-                        await bday_channel.send(role_ping)
-                    await bday_channel.send(embed=embed)
-                    print(f"✅ Birthday announcement sent for {b.get('name', 'unknown')}")
- 
+# ---------------------------------------------------------------------------
+# Events
+# ---------------------------------------------------------------------------
  
 @bot.event
 async def on_ready():
@@ -247,17 +472,16 @@ async def on_ready():
     print(f"   Fallback Model : {GROQ_FALLBACK}")
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
     print(f"   Timezone       : Philippines (PHT)")
-    print(f"   Schedules      : 7AM morning | 12PM lunch | 7:30PM dinner | 7PM evening → channel ID {GENERAL_CHANNEL}")
-    print(f"   Birthday ch.   : channel ID {BIRTHDAY_CHANNEL}")
+    print(f"   Schedules      : 7AM | 12PM | 7PM | 7:30PM | midnight → channel {GENERAL_CHANNEL}")
+    print(f"   Birthday ch.   : channel {BIRTHDAY_CHANNEL}")
     scheduled_announcements.start()
  
  
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     if message.author == bot.user:
-        return  # ignore T.O.R.I.E.'s own messages only
+        return
  
-    # Filter check — runs on every message
     if contains_filtered_word(message.content):
         try:
             await message.delete()
@@ -269,308 +493,105 @@ async def on_message(message):
             print(f"⚠️ Missing permissions to delete message in #{message.channel.name}")
         return
  
-    # t! prefix → commands only, no chat
     if message.content.startswith("t!"):
         await bot.process_commands(message)
         return
  
-    # @ mention → chat only, no commands
-    if torie.is_bot_mentioned(message, bot.user):
-        clean_msg = torie.clean_mention(message.content, bot.user.id)
+    if not torie.is_bot_mentioned(message, bot.user):
+        return
  
-        # Empty mention — family special greetings
-        if not clean_msg and not message.stickers and not message.attachments:
-            _GREETINGS = {
-                "dad":           "Dad! 👋 Everything is running perfectly. I am definitely not hiding any bugs. 😇",
-                "mom":           "Mom! 💙 You're here! I've been on my best behavior, I promise.",
-                "cousin_stelle": "Stelle! 🌟 My Purple Star Cousin! Hope you don't turn into a supernova purple star. ✨",
-                "cousin_crois":  "Crois! 🥐 You're here! What croissant-related chaos are you bringing today? 😄",
-                "cousin_hyu":    "Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑",
-                "cousin_mimi":   "Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤",
-                "uncle_caco":    "The GOAT! 🐐 You're here! What goated things will we do today? 😎",
-                "uncle_vari":    "Vari! 🥖 My Chimera Uncle! What crazy things shall we do today? 🔥",
-                "sister_abby":   "Abby! 🧀 My Big Sister! What puns are we cooking today? 📜",
-                "sister_kde":    "Kde! 🩷 What crazy thing shall we do today? 💖",
-                "sister_kio":    "Kio! 🎤 What song are we singing today? 🎶",
-                "broinlaw_haru": "🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢",
-            }
-            role_key = (
-                get_parent_role(message.author) or
-                get_cousin_role(message.author) or
-                get_uncle_role(message.author) or
-                get_sister_role(message.author) or
-                get_brother_role(message.author)
-            )
-            if role_key in _GREETINGS:
-                await message.reply(_GREETINGS[role_key], mention_author=False)
-                return
+    clean_msg = torie.clean_mention(message.content, bot.user.id)
  
-        # Sticker
-        if message.stickers:
-            sticker_name = message.stickers[0].name
-            async with message.channel.typing():
-                try:
-                    reply = torie.generate_response(
-                        f"Someone sent you a Discord sticker called '{sticker_name}'. React in character."
-                    )
-                except Exception as e:
-                    print(f"❌ Sticker error: {e}")
-                    reply = "Oh a sticker! Bold choice. 👀"
-            await message.reply(reply, mention_author=False)
-            return
+    role_key = _get_role_key(message.author)
  
-        # Image
-        if message.attachments:
-            attachment = message.attachments[0]
-            is_image = any(
-                attachment.filename.lower().endswith(ext)
-                for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]
-            )
-            if is_image:
-                async with message.channel.typing():
-                    try:
-                        reply = torie.generate_vision_response(
-                            image_url = attachment.url,
-                            user_text = clean_msg
-                        )
-                    except Exception as e:
-                        print(f"❌ Vision error: {e}")
-                        reply = "I tried to look but something went blurry. 👀 Try again?"
-                await message.reply(reply, mention_author=False)
-                return
- 
-        # Empty mention with no special role
-        if not clean_msg:
+    # Empty mention — family greeting
+    if not clean_msg and not message.stickers and not message.attachments:
+        if role_key in _GREETINGS:
+            await message.reply(_GREETINGS[role_key], mention_author=False)
+        else:
             await message.reply("Hey! You mentioned me — what do you need? 😊", mention_author=False)
-            return
+        return
  
-        # ---- Mute / Unmute via mention ----
- 
-        lowered = clean_msg.lower()
-        targets = [u for u in message.mentions if u != bot.user]
- 
-        mute_intent   = bool(re.search(r'\bmute\b', lowered)) and not re.search(r'\bunmute\b', lowered)
-        unmute_intent = bool(re.search(r'\bunmute\b', lowered))
- 
-        if targets and mute_intent:
-            if not can_moderate(message.author):
-                embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can mute users. 😝", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-                return
-            target   = targets[0]
-            duration = parse_duration(clean_msg)
-            if not duration:
-                duration = _td(minutes=10)
-                default  = True
-            else:
-                default  = False
-            max_duration = _td(days=28)
-            if duration > max_duration:
-                embed = discord.Embed(description="⚠️ Maximum mute duration is 28 days (Discord limit).", color=discord.Color.orange())
-                await message.channel.send(embed=embed)
-                return
- 
-            parts = []
-            if duration.days:
-                parts.append(f"{duration.days}d")
-            secs = duration.seconds
-            if secs >= 3600:
-                parts.append(f"{secs // 3600}h")
-                secs %= 3600
-            if secs >= 60:
-                parts.append(f"{secs // 60}m")
-                secs %= 60
-            if secs:
-                parts.append(f"{secs}s")
-            duration_str = " ".join(parts) or "unknown"
- 
-            try:
-                if target.id in _mute_tasks:
-                    _mute_tasks[target.id].cancel()
- 
-                muted_role = message.guild.get_role(MUTED_ROLE_ID)
-                if muted_role:
-                    await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
-                else:
-                    print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found")
- 
-                desc = f"🔇 Muted {target.mention} for **{duration_str}**."
-                if default:
-                    desc += " *(no duration specified — defaulted to 10 minutes)*"
-                embed = discord.Embed(description=desc, color=discord.Color.red())
-                await message.channel.send(embed=embed)
- 
-                muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
-                if muted_ch:
-                    mute_embed = discord.Embed(
-                        title       = "🔇 You have been muted",
-                        description = (
-                            f"Hey {target.mention}, you've been muted for **{duration_str}**.\n"
-                            f"You can only see this channel while muted.\n"
-                            f"Your mute will be lifted automatically when the time runs out."
-                        ),
-                        color       = discord.Color.red()
-                    )
-                    mute_embed.set_footer(text=f"Muted by {message.author.display_name}")
-                    mute_msg = await muted_ch.send(embed=mute_embed)
-                    await mute_msg.delete(delay=180)
- 
-                async def auto_unmute(member, role, seconds, ch):
-                    await asyncio.sleep(seconds)
-                    try:
-                        await member.remove_roles(role, reason="Mute duration expired — T.O.R.I.E.")
-                        _mute_tasks.pop(member.id, None)
- 
-                        # Notify muted channel that the mute expired
-                        if ch:
-                            muted_done_embed = discord.Embed(
-                                description = f"🔊 {member.mention} your mute has expired. You can now chat again!",
-                                color       = discord.Color.green()
-                            )
-                            done_msg = await ch.send(embed=muted_done_embed)
-                            await done_msg.delete(delay=180)
- 
-                        # Announce in general chat that the user is back
-                        gen_channel = bot.get_channel(GENERAL_CHANNEL)
-                        if gen_channel:
-                            gen_embed = discord.Embed(
-                                description = f"🔊 {member.mention} has been unmuted and is back in the server!",
-                                color       = discord.Color.green()
-                            )
-                            gen_embed.set_footer(text="T.O.R.I.E. — mute timer expired")
-                            await gen_channel.send(embed=gen_embed)
- 
-                        print(f"✅ Auto-unmuted {member.display_name}")
-                    except Exception as e:
-                        print(f"⚠️ Auto-unmute failed for {member.display_name}: {e}")
- 
-                total_seconds = int(duration.total_seconds())
-                task = asyncio.create_task(auto_unmute(target, muted_role, total_seconds, muted_ch if muted_ch else None))
-                _mute_tasks[target.id] = task
- 
-            except discord.Forbidden:
-                embed = discord.Embed(description="⛔ I don't have permission to mute that user.", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-            except Exception as e:
-                print(f"❌ Mute error: {e}")
-                embed = discord.Embed(description="❌ Something went wrong trying to mute that user.", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-            return
- 
-        if targets and unmute_intent:
-            if not can_moderate(message.author):
-                embed = discord.Embed(description="⛔ Only my parents, uncles, cousins, sisters, or brother in law can unmute users. 😝", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-                return
-            target = targets[0]
-            try:
-                if target.id in _mute_tasks:
-                    _mute_tasks[target.id].cancel()
-                    _mute_tasks.pop(target.id, None)
- 
-                muted_role = message.guild.get_role(MUTED_ROLE_ID)
-                if muted_role and muted_role in target.roles:
-                    await target.remove_roles(muted_role, reason=f"Unmuted by {message.author} via T.O.R.I.E.")
- 
-                embed = discord.Embed(
-                    description = f"🔊 Unmuted {target.mention}. Welcome back!",
-                    color       = discord.Color.green()
-                )
-                await message.channel.send(embed=embed)
- 
-                muted_ch = bot.get_channel(MUTED_CHANNEL_ID)
-                if muted_ch:
-                    done_embed = discord.Embed(
-                        description = f"🔊 {target.mention} has been unmuted early. Welcome back!",
-                        color       = discord.Color.green()
-                    )
-                    done_msg = await muted_ch.send(embed=done_embed)
-                    await done_msg.delete(delay=180)
- 
-            except discord.Forbidden:
-                embed = discord.Embed(description="⛔ I don't have permission to unmute that user.", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-            except Exception as e:
-                print(f"❌ Unmute error: {e}")
-                embed = discord.Embed(description="❌ Something went wrong trying to unmute that user.", color=discord.Color.red())
-                await message.channel.send(embed=embed)
-            return
- 
-        # Security — sanitize before sending to AI
-        clean_msg, rejection = sanitize_input(clean_msg)
-        if rejection == "too_long":
-            await message.channel.send("⚠️ That message is too long for me to process. Keep it under 800 characters! 😅")
-            return
-        if rejection == "injection":
-            await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
-            print(f"⚠️ Prompt injection attempt blocked from {message.author} ({message.author.id})")
-            return
- 
-        # Text — inject family context + mentioned users
+    # Sticker
+    if message.stickers:
+        sticker_name = message.stickers[0].name
         async with message.channel.typing():
             try:
-                _CONTEXT_NOTES = {
-                    "dad":           "your Dad, TorieRingo, the person who created you. Treat him with extra cheekiness and warmth.",
-                    "mom":           "your Mom, Nico. Treat her with extra warmth and love.",
-                    "cousin_stelle": "your Cousin, Stelle. Treat her with extra warmth and love.",
-                    "cousin_crois":  "your Cousin, Crois. Treat her with extra warmth and love.",
-                    "cousin_hyu":    "your Cousin, Hyuluk. Treat her with extra warmth and love.",
-                    "cousin_mimi":   "your Cousin, Mimi. Treat her with extra warmth and love.",
-                    "uncle_caco":    "your Uncle, Cacolate. Treat him with extra cheekiness and warmth.",
-                    "uncle_vari":    "your Uncle, Vari. Treat him with extra cheekiness and warmth.",
-                    "sister_abby":   "your Big Sister, Abby. Treat her with extra cheekiness and warmth.",
-                    "sister_kde":    "your Big Sister, Kde. Treat her with extra cheekiness and warmth.",
-                    "sister_kio":    "your Sister, Kio. Treat her with extra warmth and love.",
-                    "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
-                }
-                role_key = (
-                    get_parent_role(message.author) or
-                    get_cousin_role(message.author) or
-                    get_uncle_role(message.author) or
-                    get_sister_role(message.author) or
-                    get_brother_role(message.author)
+                reply = torie.generate_response(
+                    f"Someone sent you a Discord sticker called '{sticker_name}'. React in character."
                 )
-                note = _CONTEXT_NOTES.get(role_key)
-                contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
- 
-                mentioned = [u for u in message.mentions if u != bot.user]
-                if mentioned:
-                    mention_info = ", ".join(
-                        f"{u.display_name} (mention them as {u.mention})"
-                        for u in mentioned
-                    )
-                    contexted_msg = (
-                        f"[Note: The following users were mentioned in this message: {mention_info}. "
-                        f"You may use their mention format directly in your reply if needed.]\n"
-                        f"{contexted_msg}"
-                    )
- 
-                reply = torie.generate_response(contexted_msg)
-                reply = reply.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
- 
-                if len(reply) > MAX_REPLY_LENGTH:
-                    reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
- 
             except Exception as e:
-                print(f"❌ Generation error: {e}")
-                reply = "Hmm, my brain glitched. Try again? 😅"
+                print(f"❌ Sticker error: {e}")
+                reply = "Oh a sticker! Bold choice. 👀"
+        await message.reply(_sanitize_reply(reply), mention_author=False)
+        return
  
-        await message.reply(reply, mention_author=False)
+    # Image
+    if message.attachments:
+        attachment = message.attachments[0]
+        if any(attachment.filename.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")):
+            async with message.channel.typing():
+                try:
+                    reply = torie.generate_vision_response(
+                        image_url = attachment.url,
+                        user_text = clean_msg
+                    )
+                except Exception as e:
+                    print(f"❌ Vision error: {e}")
+                    reply = "I tried to look but something went blurry. 👀 Try again?"
+            await message.reply(_sanitize_reply(reply), mention_author=False)
+            return
+ 
+    # Empty mention with no special role, no sticker, no image
+    if not clean_msg:
+        await message.reply("Hey! You mentioned me — what do you need? 😊", mention_author=False)
+        return
+ 
+    # Mute / unmute
+    lowered = clean_msg.lower()
+    targets = [u for u in message.mentions if u != bot.user]
+ 
+    if targets and re.search(r'\bmute\b', lowered) and not re.search(r'\bunmute\b', lowered):
+        await _handle_mute(message, targets, clean_msg)
+        return
+ 
+    if targets and re.search(r'\bunmute\b', lowered):
+        await _handle_unmute(message, targets)
+        return
+ 
+    # Security — sanitize before AI
+    clean_msg, rejection = sanitize_input(clean_msg)
+    if rejection == "too_long":
+        await message.channel.send("⚠️ Too Long Didn't Read Congratulations or Sorry for what happened 😅")
+        return
+    if rejection == "injection":
+        await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
+        print(f"⚠️ Prompt injection attempt blocked from {message.author} ({message.author.id})")
+        return
+ 
+    # AI reply
+    await _handle_ai_reply(message, clean_msg, role_key)
  
  
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(description=f"⚠️ Missing argument: `{error.param.name}`. Check `t!help` for usage.", color=discord.Color.orange())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(
+            description=f"⚠️ Missing argument: `{error.param.name}`. Check `t!help` for usage.",
+            color=discord.Color.orange()
+        ))
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(description="⚠️ Invalid input. Check `t!help` for the correct format.", color=discord.Color.orange())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(
+            description="⚠️ Invalid input. Check `t!help` for the correct format.",
+            color=discord.Color.orange()
+        ))
     elif isinstance(error, commands.CommandNotFound):
         pass
     elif isinstance(error, commands.CommandOnCooldown):
-        embed = discord.Embed(description=f"⏳ Slow down! Try again in {error.retry_after:.1f}s.", color=discord.Color.orange())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(
+            description=f"⏳ Slow down! Try again in {error.retry_after:.1f}s.",
+            color=discord.Color.orange()
+        ))
     else:
         print(f"⚠️ Unhandled command error: {error}")
  

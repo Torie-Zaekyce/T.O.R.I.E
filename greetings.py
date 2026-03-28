@@ -43,3 +43,12 @@ EVENING_GREETINGS = [
     "🌆 The sun is setting and so should your stress. Good evening everyone — you did great today. 💙",
     "Good evening! 🌙 T.O.R.I.E. signing in for the evening check-in: you did well. Be proud of yourself. 🌟",
 ]
+
+MIDNIGHT_GREETINGS = [
+    "Happy midnight! 🌔 If you go to sleep right now, you can still get exactly 5 hours and 14 minutes of rest. Stop doing the math and just close your eyes. 🤡💤",
+    "Greetings from the void! 🌔 Just a reminder that your body is 70% water and your room is 100% blue light. Drink some H2O and stop the scroll. 🌵💧",
+    "It’s officially midnight! 🌔 Time to choose: go to bed now or stay up until your brain starts a 4K playback of that embarrassing thing you said in 2013. 💀🕯️",
+    "Happy midnight! 🌔 You’ve reached the point of no return where tomorrow morning is going to be a personal tragedy. Do yourself a favor and log off. ☕📉",
+    "Welcome to the midnight hour. 🌔 There are no more memes left to see, only eye strain and existential dread. Your reward is sleep—take it. 📱🫠",
+    "",
+]
