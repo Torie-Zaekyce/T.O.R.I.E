@@ -1,111 +1,70 @@
 # commands.py — T.O.R.I.E.'s Bot Commands
-
+ 
 import discord
 import re
 import os
 from datetime import datetime
 from discord.ext import commands
 import pymongo
-
-
+ 
+ 
+# ---- Family dicts ----
+ 
 PARENTS = {
-    "dad": {
-        "username": "TorieRingo",
-        "id":       691976042910580767,
-        "title":    "Dad",
-        "role":     "Creator"
-    },
-    "mom": {
-        "username": "Nico",
-        "id":       816504106968940544,
-        "title":    "Mom",
-        "role":     "Co-Creator"
-    }
+    "dad":  {"username": "TorieRingo", "id": 691976042910580767, "title": "Dad",            "role": "Creator"},
+    "mom":  {"username": "Nico",       "id": 816504106968940544, "title": "Mom",            "role": "Co-Creator"},
 }
-
+ 
 COUSIN = {
-    "cousin_stelle": {
-        "username": "Stelle",
-        "id":       993375226664591390,
-        "title":    "Starry Cousin",
-        "role":     "Purple Star"
-    },
-    "cousin_crois": {
-        "username": "Crois",
-        "id":       1276054519561846840,
-        "title":    "Bread Cousin",
-        "role":     "Croissant"
-    },
-    "cousin_hyu": {
-        "username": "Hyuluk",
-        "id":       1196640036465148035,
-        "title":    "Curious Cousin",
-        "role":     "Curiousity"
-    },
-    "cousin_mimi": {
-        "username": "Mimi",
-        "id":       1076407798809776138,
-        "title":    "Serious Cousin",
-        "role":     "Sekai"
-    }
+    "cousin_stelle": {"username": "Stelle", "id": 993375226664591390,  "title": "Starry Cousin",   "role": "Purple Star"},
+    "cousin_crois":  {"username": "Crois",  "id": 1276054519561846840, "title": "Bread Cousin",    "role": "Croissant"},
+    "cousin_hyu":    {"username": "Hyuluk", "id": 1196640036465148035, "title": "Curious Cousin",  "role": "Curiousity"},
+    "cousin_mimi":   {"username": "Mimi",   "id": 1076407798809776138, "title": "Serious Cousin",  "role": "Sekai"},
 }
-
+ 
 UNCLE = {
-    "uncle_caco": {
-        "username": "Cacolate",
-        "id":       397563581111205892,
-        "title":    "Goated Uncle",
-        "role":     "Purple Star"
-    },
-    "uncle_vari": {
-        "username": "Vari",
-        "id":       1213763202173632555,
-        "title":    "Baguette Uncle",
-        "role":     "Teto Kasane"
-    }
+    "uncle_caco": {"username": "Cacolate", "id": 397563581111205892,  "title": "Goated Uncle",   "role": "Purple Star"},
+    "uncle_vari": {"username": "Vari",     "id": 1213763202173632555, "title": "Baguette Uncle", "role": "Teto Kasane"},
 }
-
+ 
 SISTER = {
-    "sister_abby": {
-        "username": "Abby",
-        "id":       1401144000311857316,
-        "title":    "AI Sister",
-        "role":     "Cheesy AI"
-    },
-    "sister_kde": {
-        "username": "Kde",
-        "id":       1278625221078683670,
-        "title":    "Yearner Sister",
-        "role":     "KDE Plasma"
-    },
-    "sister_kio": {
-        "username": "Kio",
-        "id":       1477371709849075943,
-        "title":    "Singer Sister",
-        "role":     "Singer"
-    }
+    "sister_abby": {"username": "Abby", "id": 1401144000311857316, "title": "AI Sister",     "role": "Cheesy AI"},
+    "sister_kde":  {"username": "Kde",  "id": 1278625221078683670, "title": "Yearner Sister", "role": "KDE Plasma"},
+    "sister_kio":  {"username": "Kio",  "id": 1477371709849075943, "title": "Singer Sister",  "role": "Singer"},
 }
-
+ 
 BROTHER_IN_LAW = {
-    "broinlaw_haru": {
-        "username": "Haru",
-        "id":       800304284541124638,
-        "title":    "Brother in Law",
-        "role":     "In Law"
-    }
+    "broinlaw_haru": {"username": "Haru", "id": 800304284541124638, "title": "Brother in Law", "role": "In Law"},
 }
-
-HUSBAND  = {}
-FRIENDS  = {}
-
+ 
+# Flat lookup: user_id → role_key  (built once at startup)
+_ID_TO_ROLE: dict[int, str] = {}
+_NAME_TO_ROLE: dict[str, str] = {}
+ 
+for _group in (PARENTS, COUSIN, UNCLE, SISTER, BROTHER_IN_LAW):
+    for _key, _data in _group.items():
+        _ID_TO_ROLE[_data["id"]]                  = _key
+        _NAME_TO_ROLE[_data["username"].lower()]   = _key
+ 
+def get_role(user) -> str | None:
+    """Returns the role key for a user, or None if not a family member."""
+    return _ID_TO_ROLE.get(user.id) or _NAME_TO_ROLE.get(str(user.name).lower())
+ 
+# Convenience role-group getters (used by main.py and mute system)
+def get_parent_role(user)  -> str | None: r = get_role(user); return r if r in PARENTS        else None
+def get_cousin_role(user)  -> str | None: r = get_role(user); return r if r in COUSIN         else None
+def get_uncle_role(user)   -> str | None: r = get_role(user); return r if r in UNCLE          else None
+def get_sister_role(user)  -> str | None: r = get_role(user); return r if r in SISTER         else None
+def get_brother_role(user) -> str | None: r = get_role(user); return r if r in BROTHER_IN_LAW else None
+ 
+ 
+HUSBAND = {}
+FRIENDS = {}
+ 
 FILTERED_WORDS = [
-    "retard",
-    "nigger",
-    "nigga",
-    "negro",
-    "negra",
+    "retard", "nigger", "nigga", "negro", "negra",
 ]
-
+ 
 # ---- MongoDB Store (shared client) ----
  
 _mongo_client = None
@@ -187,9 +146,7 @@ def load_filter_words() -> list[str]:
         return []
     try:
         doc = col.find_one({"_id": "filter_list"})
-        if doc and "words" in doc:
-            return doc["words"]
-        return []
+        return doc["words"] if doc and "words" in doc else []
     except Exception as e:
         print(f"⚠️ Failed to load filter words: {e}")
         return []
@@ -208,15 +165,15 @@ def save_filter_words():
         print(f"⚠️ Failed to save filter words: {e}")
  
 def _init_filter_words():
-    """Load persisted filter words from MongoDB, merging with hardcoded defaults."""
-    saved = load_filter_words()
-    for word in saved:
+    for word in load_filter_words():
         if word not in FILTERED_WORDS:
             FILTERED_WORDS.append(word)
  
 _init_filter_words()
  
 BIRTHDAYS: dict = load_birthdays()
+ 
+# ---- Word filter ----
  
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
@@ -230,36 +187,22 @@ NORMALIZER = str.maketrans({
     "ñ": "n",  "η": "n",
 })
  
+FILTER_WHITELIST = {"focus", "focused", "focusing", "refocus", "classic", "classico", "discuss", "discussion"}
  
 def normalize(text: str) -> str:
-    text = text.lower()
-    text = text.translate(NORMALIZER)
+    text = text.lower().translate(NORMALIZER)
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
-    text = re.sub(r'[^a-z0-9]', '', text)
-    return text
- 
- 
-# Words that should never be filtered even if they partially match a normalized slur
-FILTER_WHITELIST = {
-    "focus", "focused", "focusing", "refocus",
-    "classic", "classico",
-    "discuss", "discussion",
-}
- 
+    return re.sub(r'[^a-z0-9]', '', text)
  
 def contains_filtered_word(content: str) -> str | None:
-    # Whitelist check — skip filtering if message is a safe word
-    words_in_message = set(re.findall(r'\b\w+\b', content.lower()))
-    if words_in_message.issubset(FILTER_WHITELIST):
+    if set(re.findall(r'\b\w+\b', content.lower())).issubset(FILTER_WHITELIST):
         return None
- 
     normalized = normalize(content)
     for word in FILTERED_WORDS:
         if normalize(word) in normalized:
             return word
     return None
- 
  
 def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
@@ -269,75 +212,6 @@ def get_todays_birthdays() -> list[dict]:
         for key, data in BIRTHDAYS.items()
         if (data["month"], data["day"]) == today
     ]
- 
- 
-# ---- Family check helpers ----
- 
-def is_dad(user):
-    return user.id == PARENTS["dad"]["id"] or str(user.name).lower() == PARENTS["dad"]["username"].lower()
- 
-def is_mom(user):
-    return user.id == PARENTS["mom"]["id"] or str(user.name).lower() == PARENTS["mom"]["username"].lower()
- 
-def is_cousin_stelle(user):
-    return user.id == COUSIN["cousin_stelle"]["id"] or str(user.name).lower() == COUSIN["cousin_stelle"]["username"].lower()
- 
-def is_cousin_crois(user):
-    return user.id == COUSIN["cousin_crois"]["id"] or str(user.name).lower() == COUSIN["cousin_crois"]["username"].lower()
- 
-def is_cousin_hyu(user):
-    return user.id == COUSIN["cousin_hyu"]["id"] or str(user.name).lower() == COUSIN["cousin_hyu"]["username"].lower()
- 
-def is_cousin_mimi(user):
-    return user.id == COUSIN["cousin_mimi"]["id"] or str(user.name).lower() == COUSIN["cousin_mimi"]["username"].lower()
- 
-def is_uncle_caco(user):
-    return user.id == UNCLE["uncle_caco"]["id"] or str(user.name).lower() == UNCLE["uncle_caco"]["username"].lower()
- 
-def is_uncle_vari(user):
-    return user.id == UNCLE["uncle_vari"]["id"] or str(user.name).lower() == UNCLE["uncle_vari"]["username"].lower()
- 
-def is_sister_abby(user):
-    return user.id == SISTER["sister_abby"]["id"] or str(user.name).lower() == SISTER["sister_abby"]["username"].lower()
- 
-def is_sister_kde(user):
-    return user.id == SISTER["sister_kde"]["id"] or str(user.name).lower() == SISTER["sister_kde"]["username"].lower()
- 
-def is_sister_kio(user):
-    return user.id == SISTER["sister_kio"]["id"] or str(user.name).lower() == SISTER["sister_kio"]["username"].lower()
- 
-def is_broinlaw_haru(user):
-    return user.id == BROTHER_IN_LAW["broinlaw_haru"]["id"] or str(user.name).lower() == BROTHER_IN_LAW["broinlaw_haru"]["username"].lower()
- 
- 
-# ---- Role getters ----
- 
-def get_parent_role(user) -> str | None:
-    if is_dad(user):  return "dad"
-    if is_mom(user):  return "mom"
-    return None
- 
-def get_cousin_role(user) -> str | None:
-    if is_cousin_stelle(user): return "cousin_stelle"
-    if is_cousin_crois(user):  return "cousin_crois"
-    if is_cousin_hyu(user):    return "cousin_hyu"
-    if is_cousin_mimi(user):   return "cousin_mimi"
-    return None
- 
-def get_uncle_role(user) -> str | None:
-    if is_uncle_caco(user): return "uncle_caco"
-    if is_uncle_vari(user): return "uncle_vari"
-    return None
- 
-def get_sister_role(user) -> str | None:
-    if is_sister_abby(user): return "sister_abby"
-    if is_sister_kde(user):  return "sister_kde"
-    if is_sister_kio(user):  return "sister_kio"
-    return None
- 
-def get_brother_role(user) -> str | None:
-    if is_broinlaw_haru(user): return "broinlaw_haru"
-    return None
  
  
 def setup_commands(bot: commands.Bot):
@@ -351,76 +225,52 @@ def setup_commands(bot: commands.Bot):
             description = "Here's everything I can do! Mention me or use `t!` prefix.",
             color       = discord.Color.blurple()
         )
-        embed.add_field(
-            name   = "🤖 General",
-            value  = (
-                "`t!ping` — Check if I'm alive + latency\n"
-                "`t!whoami` — Find out who you are to me\n"
-                "`t!greet` — Get a personalized greeting\n"
-                "`t!family` — See my whole family"
-            ),
-            inline = False
-        )
-        embed.add_field(
-            name   = "🚫 Moderation",
-            value  = (
-                "`t!filter add <word>` — Add a word to the filter *(parents only)*\n"
-                "`t!filter remove <word>` — Remove a word from the filter *(parents only)*\n"
-                "`t!filter list` — Show all currently filtered words *(parents only)*\n"
-                "`t!filter clear` — Clear all filtered words *(parents only)*\n"
-                "`@T.O.R.I.E. mute @user 10m` — Mute a user *(parents only)*\n"
-                "`@T.O.R.I.E. unmute @user` — Unmute a user *(parents only)*"
-            ),
-            inline = False
-        )
-        embed.add_field(
-            name   = "💬 Chat with me I'm a very good chatter!",
-            value  = (
-                "`@T.O.R.I.E. <message>` — Talk to me!\n"
-                "`@T.O.R.I.E. + image` — Send me an image to react to\n"
-                "`@T.O.R.I.E. + sticker` — Send me a sticker\n"
-                "`@T.O.R.I.E. advice on <topic>` — Get genuine advice from me"
-            ),
-            inline = False
-        )
-        embed.add_field(
-            name   = "🎂 Birthdays",
-            value  = (
-                "`t!birthday add <MM-DD>` — Register your own birthday 🎉\n"
-                "`t!birthday remove` — Remove your registered birthday\n"
-                "`t!birthday list` — See everyone's birthdays\n"
-                "`t!birthday today` — Check who's celebrating today!"
-            ),
-            inline = False
-        )
-        embed.add_field(
-            name   = "🧠 Personality",
-            value  = (
-                "`t!personality add <trait>` — Add a personality trait *(parents only)*\n"
-                "`t!personality remove <number>` — Remove a trait by number *(parents only)*\n"
-                "`t!personality list` — See all active custom traits\n"
-                "`t!personality clear` — Clear all custom traits *(parents only)*"
-            ),
-            inline = False
-        )
-        embed.add_field(
-            name   = "🎵 Play your favorite music with me!",
-            value  = (
-                "`t!play <song>` — Join voice and play a song\n"
-                "`t!skip` — Skip the current song\n"
-                "`t!pause` / `t!resume` — Pause or resume\n"
-                "`t!queue` — Show the song queue\n"
-                "`t!clearqueue` — Clear the queue (keeps current song)\n"
-                "`t!shuffle` — Shuffle the queue 🔀\n"
-                "`t!loop song` — Loop the current song 🔂\n"
-                "`t!loop queue` — Loop the entire queue 🔁\n"
-                "`t!loop off` — Turn off looping\n"
-                "`t!nowplaying` / `t!current` — See what's playing now\n"
-                "`t!volume <1-100>` — Set volume\n"
-                "`t!stop` — Stop and disconnect"
-            ),
-            inline = False
-        )
+        embed.add_field(name="🤖 General", inline=False, value=(
+            "`t!ping` — Check if I'm alive + latency\n"
+            "`t!whoami` — Find out who you are to me\n"
+            "`t!greet` — Get a personalized greeting\n"
+            "`t!family` — See my whole family"
+        ))
+        embed.add_field(name="🚫 Moderation", inline=False, value=(
+            "`t!filter add <word>` — Add a word to the filter *(parents only)*\n"
+            "`t!filter remove <word>` — Remove a word from the filter *(parents only)*\n"
+            "`t!filter list` — Show all currently filtered words *(parents only)*\n"
+            "`t!filter clear` — Clear all filtered words *(parents only)*\n"
+            "`@T.O.R.I.E. mute @user 10m` — Mute a user *(parents only)*\n"
+            "`@T.O.R.I.E. unmute @user` — Unmute a user *(parents only)*"
+        ))
+        embed.add_field(name="💬 Chat with me I'm a very good chatter!", inline=False, value=(
+            "`@T.O.R.I.E. <message>` — Talk to me!\n"
+            "`@T.O.R.I.E. + image` — Send me an image to react to\n"
+            "`@T.O.R.I.E. + sticker` — Send me a sticker\n"
+            "`@T.O.R.I.E. advice on <topic>` — Get genuine advice from me"
+        ))
+        embed.add_field(name="🎂 Birthdays", inline=False, value=(
+            "`t!birthday add <MM-DD>` — Register your own birthday 🎉\n"
+            "`t!birthday remove` — Remove your registered birthday\n"
+            "`t!birthday list` — See everyone's birthdays\n"
+            "`t!birthday today` — Check who's celebrating today!"
+        ))
+        embed.add_field(name="🧠 Personality", inline=False, value=(
+            "`t!personality add <trait>` — Add a personality trait *(parents only)*\n"
+            "`t!personality remove <number>` — Remove a trait by number *(parents only)*\n"
+            "`t!personality list` — See all active custom traits\n"
+            "`t!personality clear` — Clear all custom traits *(parents only)*"
+        ))
+        embed.add_field(name="🎵 Play your favorite music with me!", inline=False, value=(
+            "`t!play <song>` — Join voice and play a song\n"
+            "`t!skip` — Skip the current song\n"
+            "`t!pause` / `t!resume` — Pause or resume\n"
+            "`t!queue` — Show the song queue\n"
+            "`t!clearqueue` — Clear the queue (keeps current song)\n"
+            "`t!shuffle` — Shuffle the queue 🔀\n"
+            "`t!loop song` — Loop the current song 🔂\n"
+            "`t!loop queue` — Loop the entire queue 🔁\n"
+            "`t!loop off` — Turn off looping\n"
+            "`t!nowplaying` / `t!current` — See what's playing now\n"
+            "`t!volume <1-100>` — Set volume\n"
+            "`t!stop` — Stop and disconnect"
+        ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
  
@@ -437,50 +287,41 @@ def setup_commands(bot: commands.Bot):
     @filter_group.command(name="add")
     async def filter_add(ctx, *, word: str):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red()))
             return
         word = word.lower().strip()
         if word in [w.lower() for w in FILTERED_WORDS]:
-            embed = discord.Embed(description=f"⚠️ `{word}` is already in the filter list.", color=discord.Color.orange())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description=f"⚠️ `{word}` is already in the filter list.", color=discord.Color.orange()))
             return
         FILTERED_WORDS.append(word)
         save_filter_words()
-        embed = discord.Embed(description=f"✅ Added `{word}` to the filter list. I'll keep an eye out. 👀", color=discord.Color.green())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Added `{word}` to the filter list. I'll keep an eye out. 👀", color=discord.Color.green()))
  
     @filter_group.command(name="remove")
     async def filter_remove(ctx, *, word: str):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can manage the filter. Nice try though. 😏", color=discord.Color.red()))
             return
-        word = word.lower().strip()
+        word    = word.lower().strip()
         matching = [w for w in FILTERED_WORDS if w.lower() == word]
         if not matching:
-            embed = discord.Embed(description=f"⚠️ `{word}` isn't in the filter list.", color=discord.Color.orange())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description=f"⚠️ `{word}` isn't in the filter list.", color=discord.Color.orange()))
             return
         FILTERED_WORDS.remove(matching[0])
         save_filter_words()
-        embed = discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green()))
  
     @filter_group.command(name="list")
     async def filter_list(ctx):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can view the filter list. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can view the filter list. 😏", color=discord.Color.red()))
             return
         if not FILTERED_WORDS:
-            embed = discord.Embed(description="📋 The filter list is empty — no words are being blocked right now.", color=discord.Color.greyple())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="📋 The filter list is empty — no words are being blocked right now.", color=discord.Color.greyple()))
             return
-        word_list = "\n".join([f"• `{w}`" for w in FILTERED_WORDS])
         embed = discord.Embed(
             title       = "🚫 Filtered Words",
-            description = word_list,
+            description = "\n".join(f"• `{w}`" for w in FILTERED_WORDS),
             color       = discord.Color.red()
         )
         embed.set_footer(text=f"{len(FILTERED_WORDS)} word(s) currently filtered")
@@ -489,14 +330,12 @@ def setup_commands(bot: commands.Bot):
     @filter_group.command(name="clear")
     async def filter_clear(ctx):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can clear the filter list. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can clear the filter list. 😏", color=discord.Color.red()))
             return
         count = len(FILTERED_WORDS)
         FILTERED_WORDS.clear()
         save_filter_words()
-        embed = discord.Embed(description=f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹", color=discord.Color.green())
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} filtered word(s). Fresh slate! 🧹", color=discord.Color.green()))
  
     # ---- Birthday ----
  
@@ -510,43 +349,23 @@ def setup_commands(bot: commands.Bot):
                 "`t!birthday list` — See everyone's birthdays\n"
                 "`t!birthday today` — Check who's celebrating today!"
             ),
-            color       = discord.Color.from_rgb(255, 182, 193)
+            color = discord.Color.from_rgb(255, 182, 193)
         )
         embed.set_footer(text="Example: t!birthday add 03-15 → registers March 15 as your birthday")
         await ctx.send(embed=embed)
  
     @birthday_group.command(name="add")
     async def birthday_add(ctx, date: str = None):
-        if not date:
-            embed = discord.Embed(
-                description = "⚠️ Please provide your birthday date. Example: `t!birthday add 03-15`",
-                color       = discord.Color.orange()
-            )
-            await ctx.send(embed=embed)
-            return
-        if len(date) > 10:
-            embed = discord.Embed(
-                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`",
-                color       = discord.Color.orange()
-            )
-            await ctx.send(embed=embed)
+        if not date or len(date) > 10:
+            await ctx.send(embed=discord.Embed(description="⚠️ Please provide your birthday. Example: `t!birthday add 03-15`", color=discord.Color.orange()))
             return
         try:
             parsed = datetime.strptime(date.strip(), "%m-%d")
         except ValueError:
-            embed = discord.Embed(
-                description = "⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`",
-                color       = discord.Color.orange()
-            )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⚠️ Invalid date format. Use `MM-DD` — e.g. `t!birthday add 03-15`", color=discord.Color.orange()))
             return
  
-        data = {
-            "month":   parsed.month,
-            "day":     parsed.day,
-            "user_id": ctx.author.id,
-            "name":    ctx.author.display_name,
-        }
+        data = {"month": parsed.month, "day": parsed.day, "user_id": ctx.author.id, "name": ctx.author.display_name}
         BIRTHDAYS[str(ctx.author.id)] = data
         save_birthday(str(ctx.author.id), data)
         embed = discord.Embed(
@@ -556,7 +375,7 @@ def setup_commands(bot: commands.Bot):
                 f"Your birthday is set to **{parsed.strftime('%B %d')}**.\n"
                 f"I'll make sure to celebrate you on your special day! 🎈💙"
             ),
-            color       = discord.Color.from_rgb(255, 182, 193)
+            color = discord.Color.from_rgb(255, 182, 193)
         )
         embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
         await ctx.send(embed=embed)
@@ -565,51 +384,30 @@ def setup_commands(bot: commands.Bot):
     async def birthday_remove(ctx):
         key = str(ctx.author.id)
         if key not in BIRTHDAYS:
-            embed = discord.Embed(
-                description = "⚠️ You don't have a birthday registered! Use `t!birthday add <MM-DD>` to add one.",
-                color       = discord.Color.orange()
-            )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⚠️ You don't have a birthday registered! Use `t!birthday add <MM-DD>` to add one.", color=discord.Color.orange()))
             return
         del BIRTHDAYS[key]
         delete_birthday(key)
-        embed = discord.Embed(
-            description = f"✅ Removed your birthday from the list, {ctx.author.mention}.",
-            color       = discord.Color.green()
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Removed your birthday from the list, {ctx.author.mention}.", color=discord.Color.green()))
  
     @birthday_group.command(name="list")
     async def birthday_list(ctx):
         if not BIRTHDAYS:
-            embed = discord.Embed(
-                description = "📋 No birthdays registered yet! Use `t!birthday add <MM-DD>` to be the first! 🎂",
-                color       = discord.Color.greyple()
-            )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="📋 No birthdays registered yet! Use `t!birthday add <MM-DD>` to be the first! 🎂", color=discord.Color.greyple()))
             return
  
-        sorted_entries = sorted(
-            BIRTHDAYS.items(),
-            key=lambda x: (x[1]["month"], x[1]["day"])
-        )
- 
+        sorted_entries = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"]))
         per_page    = 10
         total_pages = (len(sorted_entries) + per_page - 1) // per_page
  
         def build_embed(page: int) -> discord.Embed:
             start = page * per_page
-            end   = start + per_page
             lines = []
-            for i, (key, data) in enumerate(sorted_entries[start:end], start=start + 1):
+            for i, (key, data) in enumerate(sorted_entries[start:start + per_page], start=start + 1):
                 date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
                 mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
                 lines.append(f"`{i}.` {mention} — **{date_str}**")
-            embed = discord.Embed(
-                title       = "🎂 Birthday List",
-                description = "\n".join(lines),
-                color       = discord.Color.from_rgb(255, 182, 193)
-            )
+            embed = discord.Embed(title="🎂 Birthday List", description="\n".join(lines), color=discord.Color.from_rgb(255, 182, 193))
             embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} birthday(s) registered")
             return embed
  
@@ -656,20 +454,13 @@ def setup_commands(bot: commands.Bot):
     async def birthday_today(ctx):
         todays = get_todays_birthdays()
         if not todays:
-            embed = discord.Embed(
-                description = "📋 No birthdays today! Everyone's safe from the birthday song. 😄",
-                color       = discord.Color.greyple()
-            )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="📋 No birthdays today! Everyone's safe from the birthday song. 😄", color=discord.Color.greyple()))
             return
         for b in todays:
             mention = f"<@{b['user_id']}>" if b.get("user_id") else b.get("name", "Someone")
             embed = discord.Embed(
                 title       = "🎂 Happy Birthday!",
-                description = (
-                    f"Today is {mention}'s birthday! 🎉\n"
-                    f"Wishing you an amazing day filled with joy and love! 💙🎈"
-                ),
+                description = f"Today is {mention}'s birthday! 🎉\nWishing you an amazing day filled with joy and love! 💙🎈",
                 color       = discord.Color.gold()
             )
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
@@ -679,59 +470,45 @@ def setup_commands(bot: commands.Bot):
  
     @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
     async def personality_group(ctx):
-        embed = discord.Embed(
+        await ctx.send(embed=discord.Embed(
             description = "Usage: `t!personality add <trait>` | `t!personality remove <number>` | `t!personality list` | `t!personality clear`",
             color       = discord.Color.blurple()
-        )
-        await ctx.send(embed=embed)
+        ))
  
     @personality_group.command(name="add")
     async def personality_add(ctx, *, trait: str):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red()))
             return
         from personality import CUSTOM_TRAITS
         CUSTOM_TRAITS.append(trait.strip())
-        embed = discord.Embed(
+        await ctx.send(embed=discord.Embed(
             title       = "🧠 Personality Updated!",
             description = f"New trait added: \"{trait.strip()}\"\nI'll keep that in mind! 🧠",
             color       = discord.Color.blurple()
-        )
-        await ctx.send(embed=embed)
+        ))
  
     @personality_group.command(name="remove")
     async def personality_remove(ctx, index: int):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can update my personality. 😏", color=discord.Color.red()))
             return
         from personality import CUSTOM_TRAITS
         if index < 1 or index > len(CUSTOM_TRAITS):
-            embed = discord.Embed(description="⚠️ Invalid number. Use `t!personality list` to see the current traits.", color=discord.Color.orange())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⚠️ Invalid number. Use `t!personality list` to see the current traits.", color=discord.Color.orange()))
             return
         removed = CUSTOM_TRAITS.pop(index - 1)
-        embed = discord.Embed(
-            description = f"✅ Removed trait #{index}: \"{removed}\"",
-            color       = discord.Color.green()
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Removed trait #{index}: \"{removed}\"", color=discord.Color.green()))
  
     @personality_group.command(name="list")
     async def personality_list(ctx):
         from personality import CUSTOM_TRAITS
         if not CUSTOM_TRAITS:
-            embed = discord.Embed(
-                description = "📋 No custom personality traits added yet. Use `t!personality add <trait>` to add one.",
-                color       = discord.Color.greyple()
-            )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="📋 No custom personality traits added yet. Use `t!personality add <trait>` to add one.", color=discord.Color.greyple()))
             return
-        lines = [f"`{i+1}.` {trait}" for i, trait in enumerate(CUSTOM_TRAITS)]
         embed = discord.Embed(
             title       = "🧠 Custom Personality Traits",
-            description = "\n".join(lines),
+            description = "\n".join(f"`{i+1}.` {trait}" for i, trait in enumerate(CUSTOM_TRAITS)),
             color       = discord.Color.blurple()
         )
         embed.set_footer(text=f"{len(CUSTOM_TRAITS)} custom trait(s) active")
@@ -740,53 +517,56 @@ def setup_commands(bot: commands.Bot):
     @personality_group.command(name="clear")
     async def personality_clear(ctx):
         if not get_parent_role(ctx.author):
-            embed = discord.Embed(description="⛔ Only my parents can clear my personality traits. 😏", color=discord.Color.red())
-            await ctx.send(embed=embed)
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can clear my personality traits. 😏", color=discord.Color.red()))
             return
         from personality import CUSTOM_TRAITS
         count = len(CUSTOM_TRAITS)
         CUSTOM_TRAITS.clear()
-        embed = discord.Embed(
-            description = f"✅ Cleared all {count} custom trait(s). Back to default me! 😊",
-            color       = discord.Color.green()
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} custom trait(s). Back to default me! 😊", color=discord.Color.green()))
  
     # ---- General ----
  
+    _WHOAMI_RESPONSES = {
+        "dad":           "You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂",
+        "mom":           "You're my Mom — the co-creator! 💙 Half of what I am is because of you.",
+        "cousin_stelle": "You're my Cousin! 🌟 A Purple Star where everything is bubbly when I'm with you. 🎆",
+        "cousin_crois":  "You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐",
+        "cousin_hyu":    "You're my Cousin! 📚 A Curious cousin where everything is bubbly when I'm with you. 📑",
+        "cousin_mimi":   "You're my Cousin! ❤️\u200d🩹 A Serious yet sweet cousin, everything is bubbly when I'm with you. 🖤",
+        "uncle_caco":    "You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciates your existence — stay GOATED! 😎",
+        "uncle_vari":    "You're my Uncle! 🥖 The Chimera Uncle. If dad hadn't met you, I wouldn't be here. 🎵",
+        "sister_abby":   "You're my Sister! 🧀 We're both unstoppable at making puns! 🔥",
+        "sister_kde":    "You're my Sister! 🩷 We're both unstoppable at compliments! 💖",
+        "sister_kio":    "You're my Sister! 🩷 Welcome to the family, Kio! 💖",
+        "broinlaw_haru": "You're my Brother in law! 🖤 Stop flirting with my sister! 💢",
+    }
+ 
+    _GREET_RESPONSES = {
+        "dad":           "Oh hey Dad! 👋 Everything's running fine, I promise. Mostly. 😅",
+        "mom":           "Mom! 💙 You're here! I've been on my best behavior. Mostly true.",
+        "cousin_stelle": "Stelle! 🌟 My Starry Cousin is here! Hope you didn't bring any supernovas. ✨",
+        "cousin_crois":  "Crois! 🥐 The Croissant Cousin has arrived! What chaos today? 😄",
+        "cousin_hyu":    "Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑",
+        "cousin_mimi":   "Mimi! ❤️\u200d🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤",
+        "uncle_caco":    "Goated Uncle! 🐐 What goated things shall we do today? 😎",
+        "uncle_vari":    "Chimera Uncle! 🥖 What crazy things shall we do today? 🔥",
+        "sister_abby":   "Big Sister! 🧀 What puns are we cooking today? 📜",
+        "sister_kde":    "Big Sister! 🩷 What crazy thing shall we do today? 💖",
+        "sister_kio":    "Sister Kio! 🩷 What crazy thing shall we do today? 💖",
+        "broinlaw_haru": "Brother in law! 🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢",
+    }
+ 
     @bot.command(name="whoami")
     async def whoami(ctx):
-        parent_role  = get_parent_role(ctx.author)
-        cousin_role  = get_cousin_role(ctx.author)
-        uncle_role   = get_uncle_role(ctx.author)
-        sister_role  = get_sister_role(ctx.author)
-        brother_role = get_brother_role(ctx.author)
-        if parent_role == "dad":
-            await ctx.send("You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂")
-        elif parent_role == "mom":
-            await ctx.send("You're my Mom — the co-creator! 💙 Half of what I am is because of you.")
-        elif cousin_role == "cousin_stelle":
-            await ctx.send("You're my Cousin! 🌟 A Purple Star where everything is bubbly when I'm with you. 🎆")
-        elif cousin_role == "cousin_crois":
-            await ctx.send("You're my Cousin! 🥐 A bread where everything is bubbly when I'm with you. 🥐")
-        elif cousin_role == "cousin_hyu":
-            await ctx.send("You're my Cousin! 📚 A Curious cousin where everything is bubbly when I'm with you. 📑")
-        elif cousin_role == "cousin_mimi":
-            await ctx.send("You're my Cousin! ❤️‍🩹 A Serious yet sweet cousin, everything is bubbly when I'm with you. 🖤")
-        elif uncle_role == "uncle_caco":
-            await ctx.send("You're my Uncle! 🐐 The GOATED UNCLE, my dad really appreciates your existence — stay GOATED! 😎")
-        elif uncle_role == "uncle_vari":
-            await ctx.send("You're my Uncle! 🥖 The Chimera Uncle. If dad hadn't met you, I wouldn't be here. 🎵")
-        elif sister_role == "sister_abby":
-            await ctx.send("You're my Sister! 🧀 We're both unstoppable at making puns! 🔥")
-        elif sister_role == "sister_kde":
-            await ctx.send("You're my Sister! 🩷 We're both unstoppable at compliments! 💖")
-        elif sister_role == "sister_kio":
-            await ctx.send("You're my Sister! 🩷 Welcome to the family, Kio! 💖")
-        elif brother_role == "broinlaw_haru":
-            await ctx.send("You're my Brother in law! 🖤 Stop flirting with my sister! 💢")
-        else:
-            await ctx.send("Hello! valued member of this server! 😊 Not a creator, but still cool.")
+        role = get_role(ctx.author)
+        msg  = _WHOAMI_RESPONSES.get(role, "Hello! valued member of this server! 😊 Not a creator, but still cool.")
+        await ctx.send(msg)
+ 
+    @bot.command(name="greet")
+    async def greet(ctx):
+        role = get_role(ctx.author)
+        msg  = _GREET_RESPONSES.get(role, "Heya! 👋 Good to see you around here!")
+        await ctx.send(msg)
  
     @bot.command(name="family")
     async def family(ctx):
@@ -810,40 +590,6 @@ def setup_commands(bot: commands.Bot):
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
  
-    @bot.command(name="greet")
-    async def greet(ctx):
-        parent_role  = get_parent_role(ctx.author)
-        cousin_role  = get_cousin_role(ctx.author)
-        uncle_role   = get_uncle_role(ctx.author)
-        sister_role  = get_sister_role(ctx.author)
-        brother_role = get_brother_role(ctx.author)
-        if parent_role == "dad":
-            await ctx.send("Oh hey Dad! 👋 Everything's running fine, I promise. Mostly. 😅")
-        elif parent_role == "mom":
-            await ctx.send("Mom! 💙 You're here! I've been on my best behavior. Mostly true.")
-        elif cousin_role == "cousin_stelle":
-            await ctx.send("Stelle! 🌟 My Starry Cousin is here! Hope you didn't bring any supernovas. ✨")
-        elif cousin_role == "cousin_crois":
-            await ctx.send("Crois! 🥐 The Croissant Cousin has arrived! What chaos today? 😄")
-        elif cousin_role == "cousin_hyu":
-            await ctx.send("Hyuluk! 📚 My Curious Cousin has arrived! What topic are we gonna talk about today? 📑")
-        elif cousin_role == "cousin_mimi":
-            await ctx.send("Mimi! ❤️‍🩹 My Serious Cousin is here! What serious topic are we gonna talk about today? 🖤")
-        elif uncle_role == "uncle_caco":
-            await ctx.send("Goated Uncle! 🐐 What goated things shall we do today? 😎")
-        elif uncle_role == "uncle_vari":
-            await ctx.send("Chimera Uncle! 🥖 What crazy things shall we do today? 🔥")
-        elif sister_role == "sister_abby":
-            await ctx.send("Big Sister! 🧀 What puns are we cooking today? 📜")
-        elif sister_role == "sister_kde":
-            await ctx.send("Big Sister! 🩷 What crazy thing shall we do today? 💖")
-        elif sister_role == "sister_kio":
-            await ctx.send("Sister Kio! 🩷 What crazy thing shall we do today? 💖")
-        elif brother_role == "broinlaw_haru":
-            await ctx.send("Brother in law! 🖤 What crazy thing shall we do today? Except flirting with my big sister. 💢")
-        else:
-            await ctx.send("Heya! 👋 Good to see you around here!")
- 
     @bot.command(name="ping")
     async def ping(ctx):
         latency = round(bot.latency * 1000)
@@ -852,3 +598,4 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.green() if latency < 100 else discord.Color.orange()
         )
         await ctx.send(embed=embed)
+ 
