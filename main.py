@@ -395,9 +395,27 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     f"[Note: The following users were mentioned: {mention_info}. "
                     f"You may use their mention format directly in your reply.]\n{contexted_msg}"
                 )
-            reply = _sanitize_reply(torie.generate_response(contexted_msg))
+
+            MAX_RETRIES = 2
+            reply = None
+            for attempt in range(MAX_RETRIES + 1):
+                raw = torie.generate_response(
+                    contexted_msg if attempt == 0
+                    else f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
+                )
+                if not contains_filtered_word(raw):
+                    reply = raw
+                    break
+                print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
+
+            if reply is None:
+                reply = "Hmm, I got tongue-tied. Try asking me something else! 😅"
+                print("⚠️ Self-check: all retries exhausted — using fallback reply")
+
+            reply = _sanitize_reply(reply)
             if len(reply) > MAX_REPLY_LENGTH:
                 reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
+
         except Exception as e:
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
