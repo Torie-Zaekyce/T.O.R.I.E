@@ -123,11 +123,11 @@ _CONTEXT_NOTES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
-    "hug":  ("*gives {target} a warm hug! 🤗*",    "hatsune miku hug anime"),
-    "kiss": ("*gives {target} a little kiss! 💋*",  "hatsune miku kiss anime"),
-    "pat":  ("*pats {target} on the head! 🥺*",     "hatsune miku pat anime"),
-    "bite": ("*playfully bites {target}! 😈*",       "hatsune miku bite anime"),
-    "lick": ("*licks {target} like a weirdo! 👅*",  "hatsune miku lick anime"),
+    "hug":  ("*gives {target} a warm hug! 🤗*",    "hatsune miku hug"),
+    "kiss": ("*gives {target} a little kiss! 💋*",  "hatsune miku kiss"),
+    "pat":  ("*pats {target} on the head! 🥺*",     "hatsune miku pat"),
+    "bite": ("*playfully bites {target}! 😈*",       "hatsune miku bite"),
+    "lick": ("*licks {target} like a weirdo! 👅*",  "hatsune miku lick"),
 }
 
 # ---------------------------------------------------------------------------
