@@ -5,7 +5,8 @@ from personality import ToriePersonality
 from commands import (
     setup_commands, get_parent_role, get_cousin_role, get_uncle_role,
     get_sister_role, get_brother_role, contains_filtered_word,
-    get_todays_birthdays, has_permission, add_warn
+    get_todays_birthdays, has_permission, add_warn,
+    _INTERACTION_ACTIONS, _search_klipy_gif
 )
 from music import setup_music
 from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
@@ -117,55 +118,6 @@ _CONTEXT_NOTES: dict[str, str] = {
     "sister_kio":    "your Sister, Kio. Treat her with extra warmth and love.",
     "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
 }
-
-# ---------------------------------------------------------------------------
-# Miku GIF interactions
-# ---------------------------------------------------------------------------
-
-_INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
-    "hug":   ("*gives {target} a warm hug! 🤗*",              "anime hug cute"),
-    "kiss":  ("*gives {target} a little kiss! 💋*",           "anime kiss cute"),
-    "pat":   ("*pats {target} on the head! 🥺*",              "anime head pat cute"),
-    "bite":  ("*playfully bites {target}! 😈*",               "anime bite cute"),
-    "lick":  ("*licks {target} like a weirdo! 👅*",           "anime lick cute"),
-    "punch": ("*punches {target} straight in the face! 👊*",  "anime punch"),
-    "kick":  ("*kicks {target} into next week! 🦵*",          "anime kick"),
-    "fuck":  ("*holds {target}'s hand! 🥺👉👈*",              "anime holding hands cute"),
-}
-
-# ---------------------------------------------------------------------------
-# KLIPY GIF search  (replaces Tenor — Tenor shuts down June 2026)
-#
-# Endpoint : GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
-# Params   : q (query string), limit (int)
-# API key  : embedded in the URL path, NOT a query param
-# Response : { "data": [ { "media": { "gif": { "url": "..." } } }, ... ] }
-#
-# Get your free key at https://klipy.com/developers
-# ---------------------------------------------------------------------------
-
-async def _search_klipy_gif(query: str) -> str | None:
-    if not KLIPY_API_KEY:
-        print("⚠️ KLIPY_API_KEY not set — GIF search disabled")
-        return None
-    try:
-        url = f"https://api.klipy.com/api/v1/{KLIPY_API_KEY}/gifs/search"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params={"q": query, "limit": 25}) as resp:
-                if resp.status != 200:
-                    print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
-                    return None
-                data = await resp.json()
-                results = data.get("data", {}).get("data", [])
-                if not results:
-                    return None
-
-                random.shuffle(results)
-                item = random.choice(results)
-                return item["file"]["hd"]["gif"]["url"]
-    except Exception as e:
-        print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
-        return None
 
 # ---------------------------------------------------------------------------
 # Duration parser + helpers
@@ -538,11 +490,37 @@ async def on_message(message: discord.Message):
         except discord.Forbidden:
             print(f"⚠️ Missing permissions in #{message.channel.name}")
         return
-
+    
     if message.content.startswith("t!"):
         await bot.process_commands(message)
         return
 
+    # ── "tor <action> @user" — no prefix needed ───────────────────────────
+    tor_match = re.match(r'^tor\s+(\w+)', message.content, re.IGNORECASE)
+    if tor_match:
+        action  = tor_match.group(1).lower()
+        targets = [u for u in message.mentions if u != bot.user]
+        if action in _INTERACTION_ACTIONS and targets:
+            target  = targets[0]
+            text_template, query = _INTERACTION_ACTIONS[action]
+            gif_url = await _search_klipy_gif(query)
+            text    = text_template.format(target=target.mention)
+            embed   = discord.Embed(description=text, color=discord.Color.pink())
+            if gif_url:
+                embed.set_image(url=gif_url)
+            embed.set_footer(text="T.O.R.I.E.")
+            await message.reply(embed=embed, mention_author=False)
+            return
+        elif action in _INTERACTION_ACTIONS and not targets:
+            await message.reply(
+                embed=discord.Embed(description="⚠️ You need to mention someone! e.g. `tor hug @user`", color=discord.Color.orange()),
+                mention_author=False
+            )
+            return
+
+    if not torie.is_bot_mentioned(message, bot.user):
+        return
+    
     if not torie.is_bot_mentioned(message, bot.user):
         return
 

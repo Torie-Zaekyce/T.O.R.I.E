@@ -6,7 +6,9 @@ import os
 from datetime import datetime
 from discord.ext import commands
 import pymongo
- 
+import aiohttp
+import random
+import os
  
 # ---- Family dicts ----
  
@@ -220,7 +222,53 @@ _FAMILY_DEFAULT_PERMS: dict[str, set] = {
     "sister_kio":    {"mute", "unmute", "warn", "purge", "sendmsg"},
     "broinlaw_haru": {"mute", "unmute", "warn", "purge", "sendmsg"},
 }
- 
+
+_INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
+    "hug":   ("*gives {target} a warm hug! 🤗*",              "anime hug cute"),
+    "kiss":  ("*gives {target} a little kiss! 💋*",           "anime kiss cute"),
+    "pat":   ("*pats {target} on the head! 🥺*",              "anime head pat cute"),
+    "bite":  ("*playfully bites {target}! 😈*",               "anime bite cute"),
+    "lick":  ("*licks {target} like a weirdo! 👅*",           "anime lick cute"),
+    "punch": ("*punches {target} straight in the face! 👊*",  "anime punch"),
+    "kick":  ("*kicks {target} into next week! 🦵*",          "anime kick"),
+    "fuck":  ("*holds {target}'s hand! 🥺👉👈*",              "anime holding hands cute"),
+}
+
+
+# ---------------------------------------------------------------------------
+# KLIPY GIF search  (replaces Tenor — Tenor shuts down June 2026)
+#
+# Endpoint : GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
+# Params   : q (query string), limit (int)
+# API key  : embedded in the URL path, NOT a query param
+# Response : { "data": [ { "media": { "gif": { "url": "..." } } }, ... ] }
+#
+# Get your free key at https://klipy.com/developers
+# ---------------------------------------------------------------------------
+
+async def _search_klipy_gif(query: str) -> str | None:
+    KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
+    if not KLIPY_API_KEY:
+        print("⚠️ KLIPY_API_KEY not set — GIF search disabled")
+        return None
+    try:
+        url = f"https://api.klipy.com/api/v1/{KLIPY_API_KEY}/gifs/search"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params={"q": query, "limit": 25}) as resp:
+                if resp.status != 200:
+                    print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
+                    return None
+                data = await resp.json()
+                results = data.get("data", {}).get("data", [])
+                if not results:
+                    return None
+                random.shuffle(results)
+                item = random.choice(results)
+                return item["file"]["hd"]["gif"]["url"]
+    except Exception as e:
+        print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
+        return None
+
 def load_user_perms(user_id: int) -> set:
     col = get_perm_col()
     if col is None: return set()
@@ -801,11 +849,7 @@ def setup_commands(bot: commands.Bot):
             await interaction.response.send_message("❌ Something went wrong.", ephemeral=True)
             print(f"❌ /sendmsg error: {e}")
 
-# ---- Interaction shortcuts ----
-    # Usage: t!hug @user | t!pat @user | t!tor punch @user | etc.
-
     async def _run_interaction(ctx, target: discord.Member, action: str):
-        from bot import _INTERACTION_ACTIONS, _search_klipy_gif
         if action not in _INTERACTION_ACTIONS:
             await ctx.send(embed=discord.Embed(
                 description=f"⚠️ Unknown action `{action}`. Valid: `{'` `'.join(_INTERACTION_ACTIONS.keys())}`",
