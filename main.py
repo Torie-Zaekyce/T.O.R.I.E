@@ -396,6 +396,7 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     f"You may use their mention format directly in your reply.]\n{contexted_msg}"
                 )
 
+            # ── Self-check loop: regenerate if response contains filtered words ──
             MAX_RETRIES = 2
             reply = None
             for attempt in range(MAX_RETRIES + 1):
@@ -408,6 +409,7 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     break
                 print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
 
+            # If all retries failed, send a safe fallback
             if reply is None:
                 reply = "Hmm, I got tongue-tied. Try asking me something else! 😅"
                 print("⚠️ Self-check: all retries exhausted — using fallback reply")
