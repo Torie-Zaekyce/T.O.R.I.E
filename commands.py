@@ -100,7 +100,7 @@ def get_filter_col():
     return _filter_col
 
 def get_whitelist_col():
-    global _filter_col
+    global _whitelist_col
     if _whitelist_col is None:
         c = _get_client()
         if c: _whitelist_col = c["torie"]["whitelisted_words"]
@@ -330,29 +330,29 @@ NORMALIZER = str.maketrans({
     "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
     "ñ": "n",  "η": "n",
 })
-FILTER_WHITELIST = {
-    "focus", "focused", "focusing", "refocus",
-    "classic", "classico", "discuss", "discussion",
-    "snicker", "snigger", "trigger", "bigger", "digger",
-    "figure", "figures", "niggle", "niggly", "niggard",
-    "assign", "assigned", "assignee", "significant",
-}
+# FILTER_WHITELIST = {
+#     "focus", "focused", "focusing", "refocus",
+#     "classic", "classico", "discuss", "discussion",
+#     "snicker", "snigger", "trigger", "bigger", "digger",
+#     "figure", "figures", "niggle", "niggly", "niggard",
+#     "assign", "assigned", "assignee", "significant",
+# }
 
-def contains_filtered_word(content: str) -> str | None:
-    original_words = re.findall(r'\b\w+\b', content.lower())
+# def contains_filtered_word(content: str) -> str | None:
+#     original_words = re.findall(r'\b\w+\b', content.lower())
 
-    if set(original_words).issubset(FILTER_WHITELIST):
-        return None
+#     if set(original_words).issubset(FILTER_WHITELIST):
+#         return None
 
-    normalized = NORMALIZER(content)
-    for word in FILTERED_WORDS:
-        norm_word = NORMALIZER(word)
-        if norm_word not in normalized:
-            continue
-        if any(norm_word in NORMALIZER(w) for w in original_words if w in FILTER_WHITELIST):
-            continue
-        return word
-    return None
+#     normalized = normalized(content)
+#     for word in FILTERED_WORDS:
+#         norm_word = normalized(word)
+#         if norm_word not in normalized:
+#             continue
+#         if any(norm_word in normalized(w) for w in original_words if w in FILTER_WHITELIST):
+#             continue
+#         return word
+#     return None
  
 def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
