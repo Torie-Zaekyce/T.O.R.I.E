@@ -384,6 +384,9 @@ def setup_commands(bot: commands.Bot):
         ))
         embed.add_field(name="💬 Chat!", inline=False, value=(
             "`@T.O.R.I.E. <message>` — Talk to me!\n"
+            "`@T.O.R.I.E. hug/kiss/pat/bite/lick/punch/kick/fuck @user` — Anime GIF interaction\n"
+            "`tor <action> @user` — Catch-all shortcut (e.g. `tor punch @user`)\n"
+            "`t!hug/kiss/pat/bite/lick/punch/kick/fuck @user` — Shortcut version\n"
             "`@T.O.R.I.E. + image` — React to an image\n"
             "`@T.O.R.I.E. advice on <topic>` — Get genuine advice"
         ))
