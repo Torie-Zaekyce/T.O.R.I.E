@@ -528,7 +528,7 @@ async def on_message(message: discord.Message):
             embed   = discord.Embed(description=text, color=discord.Color.pink())
             if gif_url:
                 embed.set_image(url=gif_url)
-            embed.set_footer(text="T.O.R.I.E.")
+            embed.set_footer(text="T.O.R.I.E. GIFs Powered by KLIPY GIF")
             await message.reply(embed=embed, mention_author=False)
             return
         elif action in _INTERACTION_ACTIONS and not targets:
