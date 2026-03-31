@@ -62,6 +62,7 @@ FILTERED_WORDS = ["retard", "nigger", "nigga", "negro", "negra"]
 _mongo_client = None
 _birthday_col = None
 _filter_col   = None
+_whitelist_col = None
 _warn_col     = None
 _perm_col     = None
  
@@ -97,6 +98,13 @@ def get_filter_col():
         c = _get_client()
         if c: _filter_col = c["torie"]["filtered_words"]
     return _filter_col
+
+def get_whitelist_col():
+    global _whitelist_col
+    if _whitelist_col is None:
+        c = _get_client()
+        if c: _whitelist_col = c["torie"]["whitelisted_words"]
+    return _whitelist_col
  
 def get_warn_col():
     global _warn_col
@@ -311,6 +319,14 @@ def has_permission(user, perm: str) -> bool:
  
 # ---- Word filter ----
  
+FILTER_WHITELIST = {
+    "focus", "focused", "focusing", "refocus",
+    "classic", "classico", "discuss", "discussion",
+    "snicker", "snigger", "trigger", "bigger", "digger",
+    "figure", "figures", "niggle", "niggly", "niggard",
+    "assign", "assigned", "assignee", "significant",
+}
+
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
@@ -322,21 +338,25 @@ NORMALIZER = str.maketrans({
     "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
     "ñ": "n",  "η": "n",
 })
-FILTER_WHITELIST = {"focus", "focused", "focusing", "refocus", "classic", "classico", "discuss", "discussion"}
- 
+
 def normalize(text: str) -> str:
     text = text.lower().translate(NORMALIZER)
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     return re.sub(r'[^a-z0-9]', '', text)
- 
+
 def contains_filtered_word(content: str) -> str | None:
-    if set(re.findall(r'\b\w+\b', content.lower())).issubset(FILTER_WHITELIST):
+    original_words = re.findall(r'\b\w+\b', content.lower())
+    if set(original_words).issubset(FILTER_WHITELIST):
         return None
     normalized = normalize(content)
     for word in FILTERED_WORDS:
-        if normalize(word) in normalized:
-            return word
+        norm_word = normalize(word)
+        if norm_word not in normalized:
+            continue
+        if any(norm_word in normalize(w) for w in original_words if w in FILTER_WHITELIST):
+            continue
+        return word
     return None
  
 def get_todays_birthdays() -> list[dict]:
