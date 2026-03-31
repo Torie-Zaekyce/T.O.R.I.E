@@ -148,18 +148,21 @@ async def _search_klipy_gif(query: str) -> str | None:
     try:
         url = f"https://api.klipy.com/api/v1/{KLIPY_API_KEY}/gifs/search"
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params={"q": query, "limit": 20}) as resp:
+            async with session.get(url, params={"q": query, "limit": 5}) as resp:
                 if resp.status != 200:
                     print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
                     return None
-                data    = await resp.json()
+                data = await resp.json()
+                import json
+                print("🔍 Klipy raw response:", json.dumps(data, indent=2)[:800])
+
                 results = data.get("data", [])
                 if not results:
                     return None
                 item = random.choice(results)
                 return item["media"]["gif"]["url"]
     except Exception as e:
-        print(f"⚠️ Klipy GIF search error: {e}")
+        print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
         return None
 
 # ---------------------------------------------------------------------------
