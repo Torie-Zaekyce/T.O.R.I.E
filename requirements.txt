@@ -9,3 +9,4 @@ deezer-python
 requests
 pymongo[srv]>=4.7.0
 certifi
+aiohttp
