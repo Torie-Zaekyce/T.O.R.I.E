@@ -304,7 +304,7 @@ def get_todays_birthdays() -> list[dict]:
 def setup_commands(bot: commands.Bot):
  
     # ---- Help ----
- 
+     
     @bot.command(name="help")
     async def help_command(ctx):
         embed = discord.Embed(
@@ -336,7 +336,6 @@ def setup_commands(bot: commands.Bot):
         ))
         embed.add_field(name="💬 Chat!", inline=False, value=(
             "`@T.O.R.I.E. <message>` — Talk to me!\n"
-            "`@T.O.R.I.E. hug/kiss/pat/bite/lick @user` — Miku GIF interaction 🎵\n"
             "`@T.O.R.I.E. + image` — React to an image\n"
             "`@T.O.R.I.E. advice on <topic>` — Get genuine advice"
         ))
@@ -361,7 +360,7 @@ def setup_commands(bot: commands.Bot):
         await ctx.send(embed=embed)
  
     # ---- Filter ----
- 
+    
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
         await ctx.send(embed=discord.Embed(
@@ -778,7 +777,7 @@ def setup_commands(bot: commands.Bot):
             print(f"❌ Purge error: {e}")
  
     # ---- Slash: /sendmsg ----
- 
+    
     @bot.tree.command(name="sendmsg", description="Send an anonymous message to a channel as T.O.R.I.E.")
     @discord.app_commands.describe(channel="The channel to send to", message="The message to send")
     async def sendmsg(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
@@ -801,3 +800,61 @@ def setup_commands(bot: commands.Bot):
         except Exception as e:
             await interaction.response.send_message("❌ Something went wrong.", ephemeral=True)
             print(f"❌ /sendmsg error: {e}")
+
+# ---- Interaction shortcuts ----
+    # Usage: t!hug @user | t!pat @user | t!tor punch @user | etc.
+
+    async def _run_interaction(ctx, target: discord.Member, action: str):
+        from bot import _INTERACTION_ACTIONS, _search_klipy_gif
+        if action not in _INTERACTION_ACTIONS:
+            await ctx.send(embed=discord.Embed(
+                description=f"⚠️ Unknown action `{action}`. Valid: `{'` `'.join(_INTERACTION_ACTIONS.keys())}`",
+                color=discord.Color.orange()
+            ))
+            return
+        text_template, query = _INTERACTION_ACTIONS[action]
+        gif_url = await _search_klipy_gif(query)
+        text    = text_template.format(target=target.mention)
+
+        embed = discord.Embed(description=text, color=discord.Color.pink())
+        if gif_url:
+            embed.set_image(url=gif_url)
+        embed.set_footer(text="T.O.R.I.E.")
+        await ctx.send(embed=embed)
+
+    @bot.command(name="hug")
+    async def cmd_hug(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "hug")
+
+    @bot.command(name="kiss")
+    async def cmd_kiss(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "kiss")
+
+    @bot.command(name="pat")
+    async def cmd_pat(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "pat")
+
+    @bot.command(name="bite")
+    async def cmd_bite(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "bite")
+
+    @bot.command(name="lick")
+    async def cmd_lick(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "lick")
+
+    @bot.command(name="punch")
+    async def cmd_punch(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "punch")
+
+    @bot.command(name="kick")
+    async def cmd_kick(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "kick")
+
+    @bot.command(name="fuck")
+    async def cmd_fuck(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, "fuck")
+
+    @bot.command(name="tor")
+    async def cmd_tor(ctx, action: str, target: discord.Member):
+        """Catch-all shortcut: t!tor punch @user"""
+        await _run_interaction(ctx, target, action.lower())
