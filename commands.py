@@ -344,12 +344,12 @@ def contains_filtered_word(content: str) -> str | None:
     if set(original_words).issubset(FILTER_WHITELIST):
         return None
 
-    normalized = normalized(content)
+    normalized = normalize(content)
     for word in FILTERED_WORDS:
-        norm_word = normalized(word)
+        norm_word = normalize(word)
         if norm_word not in normalized:
             continue
-        if any(norm_word in normalized(w) for w in original_words if w in FILTER_WHITELIST):
+        if any(norm_word in normalize(w) for w in original_words if w in FILTER_WHITELIST):
             continue
         return word
     return None
