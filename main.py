@@ -153,14 +153,13 @@ async def _search_klipy_gif(query: str) -> str | None:
                     print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
                     return None
                 data = await resp.json()
-                import json
-                print("🔍 Klipy raw response:", json.dumps(data, indent=2)[:800])
 
-                results = data.get("data", [])
+                results = data.get("data", {}).get("data", [])
                 if not results:
                     return None
                 item = random.choice(results)
-                return item["media"]["gif"]["url"]
+
+                return item["file"]["hd"]["gif"]["url"]
     except Exception as e:
         print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
         return None
@@ -590,8 +589,13 @@ async def on_message(message: discord.Message):
             target  = targets[0]
             gif_url = await _search_klipy_gif(query)
             text    = text_template.format(target=target.mention)
-            content = f"{text}\n{gif_url}" if gif_url else text
-            await message.reply(content, mention_author=False)
+
+            embed = discord.Embed(description=text, color=discord.Color.pink())
+            if gif_url:
+                embed.set_image(url=gif_url)
+            embed.set_footer(text="T.O.R.I.E.")
+
+            await message.reply(embed=embed, mention_author=False)
             return
 
     # ── Warn ──────────────────────────────────────────────────────────────
