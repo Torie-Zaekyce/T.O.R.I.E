@@ -141,7 +141,7 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
 # Get your free key at https://klipy.com/developers
 # ---------------------------------------------------------------------------
 
-async def _search_klipy_gif(query: str) -> str | None:
+async def _search_klipy_gif(query: str, action: str) -> str | None:
     if not KLIPY_API_KEY:
         print("⚠️ KLIPY_API_KEY not set — GIF search disabled")
         return None
@@ -157,12 +157,19 @@ async def _search_klipy_gif(query: str) -> str | None:
                 if not results:
                     return None
 
-                miku_results = [
-                    item for item in results
-                    if "miku" in item.get("title", "").lower()
-                    or "miku" in item.get("slug", "").lower()
-                ]
-                pool = miku_results if miku_results else results
+                def _matches(item: dict, keyword: str) -> bool:
+                    return (
+                        keyword in item.get("title", "").lower() or
+                        keyword in item.get("slug", "").lower()
+                    )
+
+                best = [r for r in results if _matches(r, "miku") and _matches(r, action)]
+
+                action_only = [r for r in results if _matches(r, action)]
+
+                miku_only = [r for r in results if _matches(r, "miku")]
+
+                pool = best or action_only or miku_only or results
                 item = random.choice(pool)
                 return item["file"]["hd"]["gif"]["url"]
     except Exception as e:
@@ -588,11 +595,11 @@ async def on_message(message: discord.Message):
     lowered = clean_msg.lower()
     targets = [u for u in message.mentions if u != bot.user]
 
-    # ── GIF interactions ──────────────────────────────────────────────────
+# ── GIF interactions ──────────────────────────────────────────────────
     for action, (text_template, query) in _INTERACTION_ACTIONS.items():
         if re.search(rf'\b{action}\b', lowered) and targets:
             target  = targets[0]
-            gif_url = await _search_klipy_gif(query)
+            gif_url = await _search_klipy_gif(query, action)  # ✅ pass action
             text    = text_template.format(target=target.mention)
 
             embed = discord.Embed(description=text, color=discord.Color.pink())
