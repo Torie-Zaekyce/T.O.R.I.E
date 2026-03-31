@@ -123,11 +123,14 @@ _CONTEXT_NOTES: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
-    "hug":  ("*gives {target} a warm hug! 🤗*",    "hatsune miku hug"),
-    "kiss": ("*gives {target} a little kiss! 💋*",  "hatsune miku kiss"),
-    "pat":  ("*pats {target} on the head! 🥺*",     "hatsune miku pat"),
-    "bite": ("*playfully bites {target}! 😈*",       "hatsune miku bite"),
-    "lick": ("*licks {target} like a weirdo! 👅*",  "hatsune miku lick"),
+    "hug":   ("*gives {target} a warm hug! 🤗*",              "anime hug cute"),
+    "kiss":  ("*gives {target} a little kiss! 💋*",           "anime kiss cute"),
+    "pat":   ("*pats {target} on the head! 🥺*",              "anime head pat cute"),
+    "bite":  ("*playfully bites {target}! 😈*",               "anime bite cute"),
+    "lick":  ("*licks {target} like a weirdo! 👅*",           "anime lick cute"),
+    "punch": ("*punches {target} straight in the face! 👊*",  "anime punch"),
+    "kick":  ("*kicks {target} into next week! 🦵*",          "anime kick"),
+    "fuck":  ("*holds {target}'s hand! 🥺👉👈*",              "anime holding hands cute"),
 }
 
 # ---------------------------------------------------------------------------
@@ -141,7 +144,7 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
 # Get your free key at https://klipy.com/developers
 # ---------------------------------------------------------------------------
 
-async def _search_klipy_gif(query: str, action: str) -> str | None:
+async def _search_klipy_gif(query: str) -> str | None:
     if not KLIPY_API_KEY:
         print("⚠️ KLIPY_API_KEY not set — GIF search disabled")
         return None
@@ -156,20 +159,9 @@ async def _search_klipy_gif(query: str, action: str) -> str | None:
                 results = data.get("data", {}).get("data", [])
                 if not results:
                     return None
+
                 random.shuffle(results)
-
-                def _matches(item: dict, keyword: str) -> bool:
-                    return (
-                        keyword in item.get("title", "").lower() or
-                        keyword in item.get("slug", "").lower()
-                    )
-
-                best        = [r for r in results if _matches(r, "miku") and _matches(r, action)]
-                action_only = [r for r in results if _matches(r, action)]
-                miku_only   = [r for r in results if _matches(r, "miku")]
-
-                pool = best or action_only or miku_only or results
-                item = random.choice(pool)
+                item = random.choice(results)
                 return item["file"]["hd"]["gif"]["url"]
     except Exception as e:
         print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
@@ -598,7 +590,7 @@ async def on_message(message: discord.Message):
     for action, (text_template, query) in _INTERACTION_ACTIONS.items():
         if re.search(rf'\b{action}\b', lowered) and targets:
             target  = targets[0]
-            gif_url = await _search_klipy_gif(query, action)  # ✅ pass action
+            gif_url = await _search_klipy_gif(query)
             text    = text_template.format(target=target.mention)
 
             embed = discord.Embed(description=text, color=discord.Color.pink())
