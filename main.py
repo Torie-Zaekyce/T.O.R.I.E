@@ -148,7 +148,7 @@ async def _search_klipy_gif(query: str, action: str) -> str | None:
     try:
         url = f"https://api.klipy.com/api/v1/{KLIPY_API_KEY}/gifs/search"
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params={"q": query, "limit": 10}) as resp:
+            async with session.get(url, params={"q": query, "limit": 25}) as resp:
                 if resp.status != 200:
                     print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
                     return None
@@ -156,6 +156,7 @@ async def _search_klipy_gif(query: str, action: str) -> str | None:
                 results = data.get("data", {}).get("data", [])
                 if not results:
                     return None
+                random.shuffle(results)
 
                 def _matches(item: dict, keyword: str) -> bool:
                     return (
@@ -163,11 +164,9 @@ async def _search_klipy_gif(query: str, action: str) -> str | None:
                         keyword in item.get("slug", "").lower()
                     )
 
-                best = [r for r in results if _matches(r, "miku") and _matches(r, action)]
-
+                best        = [r for r in results if _matches(r, "miku") and _matches(r, action)]
                 action_only = [r for r in results if _matches(r, action)]
-
-                miku_only = [r for r in results if _matches(r, "miku")]
+                miku_only   = [r for r in results if _matches(r, "miku")]
 
                 pool = best or action_only or miku_only or results
                 item = random.choice(pool)
