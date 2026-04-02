@@ -9,7 +9,7 @@ import pymongo
 import aiohttp
 import random
 import os
- 
+
 # ---- Family dicts ----
  
 PARENTS = {
@@ -861,31 +861,6 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description="⛔ I don't have permission to delete messages here.", color=discord.Color.red()))
         except Exception as e:
             print(f"❌ Purge error: {e}")
- 
-    # ---- Slash: /sendmsg ----
- 
-    @bot.tree.command(name="sendmsg", description="Send an anonymous message to a channel as T.O.R.I.E.")
-    @discord.app_commands.describe(channel="The channel to send to", message="The message to send")
-    async def sendmsg(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-        if not has_permission(interaction.user, "sendmsg"):
-            await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
-            return
-        if not message.strip():
-            await interaction.response.send_message("⚠️ Message cannot be empty.", ephemeral=True)
-            return
-        if len(message) > 2000:
-            await interaction.response.send_message("⚠️ Message is too long (max 2000 chars).", ephemeral=True)
-            return
-        message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
-        try:
-            await channel.send(message)
-            await interaction.response.send_message(f"✅ Message sent to {channel.mention}.", ephemeral=True)
-            print(f"📨 /sendmsg by {interaction.user} → #{channel.name}")
-        except discord.Forbidden:
-            await interaction.response.send_message(f"⛔ No permission to send in {channel.mention}.", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message("❌ Something went wrong.", ephemeral=True)
-            print(f"❌ /sendmsg error: {e}")
  
     # ---- Slash: /sendmsg ----
     
