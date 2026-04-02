@@ -1,15 +1,10 @@
 import discord
 from discord.ext import commands, tasks
 from groq import Groq
-from personality import ToriePersonality
-from commands import (
-    setup_commands, get_parent_role, get_cousin_role, get_uncle_role,
-    get_sister_role, get_brother_role, contains_filtered_word,
-    get_todays_birthdays, has_permission, add_warn,
-    _INTERACTION_ACTIONS, _search_klipy_gif
-)
-from music import setup_music
-from greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
+from bot.personality import ToriePersonality
+from bot.commands import setup_commands, get_parent_role, get_cousin_role, get_uncle_role, get_sister_role, get_brother_role, contains_filtered_word, get_todays_birthdays, has_permission, add_warn
+from bot.music import setup_music
+from bot.greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
 from datetime import datetime, timedelta as _td
 from dotenv import load_dotenv
 import aiohttp
@@ -50,7 +45,7 @@ INJECTION_REGEX = re.compile("|".join(INJECTION_PATTERNS), re.IGNORECASE)
 
 DISCORD_TOKEN     = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY")
-KLIPY_API_KEY     = os.getenv("KLIPY_API_KEY")
+TENOR_API_KEY     = os.getenv("TENOR_API_KEY")   # ← get from console.cloud.google.com (Tenor API)
 GROQ_MODEL        = "llama-3.3-70b-versatile"
 GROQ_FALLBACK     = "llama-3.1-8b-instant"
 GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
@@ -118,6 +113,45 @@ _CONTEXT_NOTES: dict[str, str] = {
     "sister_kio":    "your Sister, Kio. Treat her with extra warmth and love.",
     "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
 }
+
+# ---------------------------------------------------------------------------
+# Miku GIF interactions
+# ---------------------------------------------------------------------------
+
+_INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
+    "hug":  ("*gives {target} a warm hug! 🤗*",    "miku hug anime"),
+    "kiss": ("*gives {target} a little kiss! 💋*",  "miku kiss anime"),
+    "pat":  ("*pats {target} on the head! 🥺*",     "miku pat anime"),
+    "bite": ("*playfully bites {target}! 😈*",       "miku bite anime"),
+    "lick": ("*licks {target} like a weirdo! 👅*",  "miku lick anime"),
+}
+
+async def _search_tenor_gif(query: str) -> str | None:
+    if not TENOR_API_KEY:
+        print("⚠️ TENOR_API_KEY not set — GIF search disabled")
+        return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://tenor.googleapis.com/v2/search",
+                params={
+                    "q":             query,
+                    "key":           TENOR_API_KEY,
+                    "limit":         20,
+                    "media_filter":  "gif",
+                    "contentfilter": "medium",
+                }
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data    = await resp.json()
+                results = data.get("results", [])
+                if not results:
+                    return None
+                return random.choice(results)["media_formats"]["gif"]["url"]
+    except Exception as e:
+        print(f"⚠️ Tenor search error: {e}")
+        return None
 
 # ---------------------------------------------------------------------------
 # Duration parser + helpers
@@ -228,8 +262,10 @@ async def _handle_warn(message: discord.Message, targets: list, clean_msg: str) 
         return
 
     target = targets[0]
+    # Extract reason — strip mentions and the word "warn"
     reason = re.sub(r'<@!?\d+>', '', clean_msg)
     reason = re.sub(r'\bwarn\b', '', reason, flags=re.I).strip() or "No reason provided"
+
     warn_count = add_warn(str(target.id), reason, message.author.display_name)
 
     await message.channel.send(embed=discord.Embed(
@@ -395,8 +431,7 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     f"[Note: The following users were mentioned: {mention_info}. "
                     f"You may use their mention format directly in your reply.]\n{contexted_msg}"
                 )
-
-            # ── Self-check loop: regenerate if response contains filtered words ──
+            # Self-check loop — regenerate if T.O.R.I.E.'s reply contains filtered words
             MAX_RETRIES = 2
             reply = None
             for attempt in range(MAX_RETRIES + 1):
@@ -409,7 +444,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     break
                 print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
 
-            # If all retries failed, send a safe fallback
             if reply is None:
                 reply = "Hmm, I got tongue-tied. Try asking me something else! 😅"
                 print("⚠️ Self-check: all retries exhausted — using fallback reply")
@@ -417,7 +451,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
             reply = _sanitize_reply(reply)
             if len(reply) > MAX_REPLY_LENGTH:
                 reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
-
         except Exception as e:
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
@@ -444,22 +477,27 @@ async def scheduled_announcements():
         print(f"❌ Could not find channel with ID {GENERAL_CHANNEL}"); return
 
     if now.hour == GREET_HOUR    and now.minute == 0:
-        await channel.send(random.choice(MORNING_GREETINGS));  print("✅ Morning greeting sent")
+        await channel.send(random.choice(MORNING_GREETINGS))
+        print(f"✅ Morning greeting sent")
     elif now.hour == LUNCH_HOUR  and now.minute == 0:
-        await channel.send(random.choice(LUNCH_REMINDERS));    print("✅ Lunch reminder sent")
+        await channel.send(random.choice(LUNCH_REMINDERS))
+        print(f"✅ Lunch reminder sent")
     elif now.hour == DINNER_HOUR and now.minute == DINNER_MINUTE:
-        await channel.send(random.choice(DINNER_REMINDERS));   print("✅ Dinner reminder sent")
+        await channel.send(random.choice(DINNER_REMINDERS))
+        print(f"✅ Dinner reminder sent")
     elif now.hour == EVENING_HOUR and now.minute == 0:
-        await channel.send(random.choice(EVENING_GREETINGS));  print("✅ Evening greeting sent")
+        await channel.send(random.choice(EVENING_GREETINGS))
+        print(f"✅ Evening greeting sent")
     elif now.hour == MIDNIGHT_HOUR and now.minute == 0:
-        await channel.send(random.choice(MIDNIGHT_GREETINGS)); print("✅ Midnight greeting sent")
+        await channel.send(random.choice(MIDNIGHT_GREETINGS))
+        print(f"✅ Midnight greeting sent")
 
     if now.hour == 0 and now.minute == 0:
         birthdays = get_todays_birthdays()
         if birthdays:
             bday_ch = bot.get_channel(BIRTHDAY_CHANNEL)
             if not bday_ch:
-                print("❌ Birthday channel not found"); return
+                print(f"❌ Birthday channel not found"); return
             for b in birthdays:
                 user_mention = f"<@{b['user_id']}>" if b.get("user_id") else f"**{b.get('name', 'Someone')}**"
                 role_ping    = f"<@&{BIRTHDAY_PING_ROLE}>" if BIRTHDAY_PING_ROLE else ""
@@ -485,7 +523,7 @@ async def on_ready():
     print(f"   Primary Model  : {GROQ_MODEL}")
     print(f"   Fallback Model : {GROQ_FALLBACK}")
     print(f"   Vision Model   : {GROQ_VISION_MODEL}")
-    print(f"   Klipy GIFs     : {'✅ enabled' if KLIPY_API_KEY else '⚠️ KLIPY_API_KEY not set'}")
+    print(f"   Tenor GIFs     : {'✅ enabled' if TENOR_API_KEY else '⚠️ TENOR_API_KEY not set'}")
     print(f"   Timezone       : Philippines (PHT)")
     print(f"   Schedules      : 7AM | 12PM | 7PM | 7:30PM | midnight → {GENERAL_CHANNEL}")
     print(f"   Birthday ch.   : {BIRTHDAY_CHANNEL}")
@@ -510,37 +548,11 @@ async def on_message(message: discord.Message):
         except discord.Forbidden:
             print(f"⚠️ Missing permissions in #{message.channel.name}")
         return
-    
+
     if message.content.startswith("t!"):
         await bot.process_commands(message)
         return
 
-    # ── "tor <action> @user" — no prefix needed ───────────────────────────
-    tor_match = re.match(r'^tor\s+(\w+)', message.content, re.IGNORECASE)
-    if tor_match:
-        action  = tor_match.group(1).lower()
-        targets = [u for u in message.mentions if u != bot.user]
-        if action in _INTERACTION_ACTIONS and targets:
-            target  = targets[0]
-            text_template, query = _INTERACTION_ACTIONS[action]
-            gif_url = await _search_klipy_gif(query)
-            text    = text_template.format(target=target.mention)
-            embed   = discord.Embed(description=text, color=discord.Color.pink())
-            if gif_url:
-                embed.set_image(url=gif_url)
-            embed.set_footer(text="T.O.R.I.E. GIFs Powered by KLIPY GIF")
-            await message.reply(embed=embed, mention_author=False)
-            return
-        elif action in _INTERACTION_ACTIONS and not targets:
-            await message.reply(
-                embed=discord.Embed(description="⚠️ You need to mention someone! e.g. `tor hug @user`", color=discord.Color.orange()),
-                mention_author=False
-            )
-            return
-
-    if not torie.is_bot_mentioned(message, bot.user):
-        return
-    
     if not torie.is_bot_mentioned(message, bot.user):
         return
 
@@ -584,19 +596,14 @@ async def on_message(message: discord.Message):
     lowered = clean_msg.lower()
     targets = [u for u in message.mentions if u != bot.user]
 
-# ── GIF interactions ──────────────────────────────────────────────────
+    # ── GIF interactions ──────────────────────────────────────────────────
     for action, (text_template, query) in _INTERACTION_ACTIONS.items():
         if re.search(rf'\b{action}\b', lowered) and targets:
             target  = targets[0]
-            gif_url = await _search_klipy_gif(query)
+            gif_url = await _search_tenor_gif(query)
             text    = text_template.format(target=target.mention)
-
-            embed = discord.Embed(description=text, color=discord.Color.pink())
-            if gif_url:
-                embed.set_image(url=gif_url)
-            embed.set_footer(text="T.O.R.I.E. GIFs Powered by KLIPY GIF")
-
-            await message.reply(embed=embed, mention_author=False)
+            content = f"{text}\n{gif_url}" if gif_url else text
+            await message.reply(content, mention_author=False)
             return
 
     # ── Warn ──────────────────────────────────────────────────────────────
