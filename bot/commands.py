@@ -319,14 +319,6 @@ def has_permission(user, perm: str) -> bool:
  
 # ---- Word filter ----
  
-FILTER_WHITELIST = {
-    "focus", "focused", "focusing", "refocus",
-    "classic", "classico", "discuss", "discussion",
-    "snicker", "snigger", "trigger", "bigger", "digger",
-    "figure", "figures", "niggle", "niggly", "niggard",
-    "assign", "assigned", "assignee", "significant",
-}
-
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
@@ -338,25 +330,51 @@ NORMALIZER = str.maketrans({
     "ı": "i",  "ɪ": "i",  "ɡ": "g",  "ǝ": "e",
     "ñ": "n",  "η": "n",
 })
-
+FILTER_WHITELIST = {
+    "focus", "focused", "focusing", "refocus",
+    "classic", "classico", "discuss", "discussion",
+    "snicker", "snigger", "trigger", "bigger", "digger",
+    "figure", "figures", "niggle", "niggly", "niggard",
+    "assign", "assigned", "assignee", "significant",
+    "vinegar", "renegade",
+}
+ 
 def normalize(text: str) -> str:
     text = text.lower().translate(NORMALIZER)
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     return re.sub(r'[^a-z0-9]', '', text)
-
+ 
 def contains_filtered_word(content: str) -> str | None:
-    original_words = re.findall(r'\b\w+\b', content.lower())
-    if set(original_words).issubset(FILTER_WHITELIST):
-        return None
-    normalized = normalize(content)
-    for word in FILTERED_WORDS:
-        norm_word = normalize(word)
-        if norm_word not in normalized:
+    """
+    Two-pass filter with no false positives:
+ 
+    Pass 1 — per-token exact normalized match (word-boundary safe).
+             Catches: nigger, n1gger, r3t4rd, retard.
+             Skips:   snigger, retarding, enegra, sniggers.
+ 
+    Pass 2 — full-string evasion check, only when no token is long enough
+             to span a complete slur (punctuation/space evasion like
+             n!gger, n.i.g.g.e.r, "n i g g e r"). Skips when a longer
+             legitimate word like "snigger" is present in the message.
+    """
+    tokens       = re.findall(r'\b\w+\b', content.lower())
+    norm_slurs   = {normalize(w): w for w in FILTERED_WORDS}
+    max_slur_len = max(len(normalize(w)) for w in FILTERED_WORDS)
+ 
+    for token in tokens:
+        if token in FILTER_WHITELIST:
             continue
-        if any(norm_word in normalize(w) for w in original_words if w in FILTER_WHITELIST):
-            continue
-        return word
+        if normalize(token) in norm_slurs:
+            return norm_slurs[normalize(token)]
+ 
+    max_token_len = max((len(t) for t in tokens), default=0)
+    if max_token_len < max_slur_len:
+        norm_full = normalize(content)
+        for slur in FILTERED_WORDS:
+            if normalize(slur) in norm_full:
+                return slur
+ 
     return None
  
 def get_todays_birthdays() -> list[dict]:
@@ -368,11 +386,10 @@ def get_todays_birthdays() -> list[dict]:
         if (data["month"], data["day"]) == today
     ]
  
- 
 def setup_commands(bot: commands.Bot):
- 
+
     # ---- Help ----
-     
+ 
     @bot.command(name="help")
     async def help_command(ctx):
         embed = discord.Embed(
@@ -404,9 +421,7 @@ def setup_commands(bot: commands.Bot):
         ))
         embed.add_field(name="💬 Chat!", inline=False, value=(
             "`@T.O.R.I.E. <message>` — Talk to me!\n"
-            "`@T.O.R.I.E. hug/kiss/pat/bite/lick/punch/kick/fuck @user` — Anime GIF interaction\n"
-            "`tor <action> @user` — Catch-all shortcut (e.g. `tor punch @user`)\n"
-            "`t!hug/kiss/pat/bite/lick/punch/kick/fuck @user` — Shortcut version\n"
+            "`@T.O.R.I.E. hug/kiss/pat/bite/lick @user` — Miku GIF interaction 🎵\n"
             "`@T.O.R.I.E. + image` — React to an image\n"
             "`@T.O.R.I.E. advice on <topic>` — Get genuine advice"
         ))
@@ -431,7 +446,7 @@ def setup_commands(bot: commands.Bot):
         await ctx.send(embed=embed)
  
     # ---- Filter ----
-    
+ 
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
         await ctx.send(embed=discord.Embed(
@@ -846,6 +861,31 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description="⛔ I don't have permission to delete messages here.", color=discord.Color.red()))
         except Exception as e:
             print(f"❌ Purge error: {e}")
+ 
+    # ---- Slash: /sendmsg ----
+ 
+    @bot.tree.command(name="sendmsg", description="Send an anonymous message to a channel as T.O.R.I.E.")
+    @discord.app_commands.describe(channel="The channel to send to", message="The message to send")
+    async def sendmsg(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+        if not has_permission(interaction.user, "sendmsg"):
+            await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
+            return
+        if not message.strip():
+            await interaction.response.send_message("⚠️ Message cannot be empty.", ephemeral=True)
+            return
+        if len(message) > 2000:
+            await interaction.response.send_message("⚠️ Message is too long (max 2000 chars).", ephemeral=True)
+            return
+        message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+        try:
+            await channel.send(message)
+            await interaction.response.send_message(f"✅ Message sent to {channel.mention}.", ephemeral=True)
+            print(f"📨 /sendmsg by {interaction.user} → #{channel.name}")
+        except discord.Forbidden:
+            await interaction.response.send_message(f"⛔ No permission to send in {channel.mention}.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message("❌ Something went wrong.", ephemeral=True)
+            print(f"❌ /sendmsg error: {e}")
  
     # ---- Slash: /sendmsg ----
     
