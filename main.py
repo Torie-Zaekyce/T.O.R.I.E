@@ -288,15 +288,20 @@ async def _handle_mute(message: discord.Message, targets: list, clean_msg: str) 
         return
 
     duration_str = _fmt_duration(duration)
+    muted_role   = message.guild.get_role(MUTED_ROLE_ID)
+
+    if not muted_role:
+        print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found — cannot mute")
+        await message.channel.send(embed=discord.Embed(
+            description="⛔ Muted role not found. Contact an admin.", color=discord.Color.red()
+        ))
+        return
+
     try:
         if target.id in _mute_tasks:
             _mute_tasks[target.id].cancel()
 
-        muted_role = message.guild.get_role(MUTED_ROLE_ID)
-        if muted_role:
-            await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
-        else:
-            print(f"⚠️ Muted role ID {MUTED_ROLE_ID} not found")
+        await target.add_roles(muted_role, reason=f"Muted by {message.author} via T.O.R.I.E.")
 
         desc = f"🔇 Muted {target.mention} for **{duration_str}**."
         if default: desc += " *(no duration specified — defaulted to 10 minutes)*"
@@ -396,7 +401,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     f"You may use their mention format directly in your reply.]\n{contexted_msg}"
                 )
 
-            # ── Self-check loop: regenerate if response contains filtered words ──
             MAX_RETRIES = 2
             reply = None
             for attempt in range(MAX_RETRIES + 1):
@@ -409,7 +413,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
                     break
                 print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
 
-            # If all retries failed, send a safe fallback
             if reply is None:
                 reply = "Hmm, I got tongue-tied. Try asking me something else! 😅"
                 print("⚠️ Self-check: all retries exhausted — using fallback reply")
@@ -510,12 +513,12 @@ async def on_message(message: discord.Message):
         except discord.Forbidden:
             print(f"⚠️ Missing permissions in #{message.channel.name}")
         return
-    
+
     if message.content.startswith("t!"):
         await bot.process_commands(message)
         return
 
-    # ── "tor <action> @user" — no prefix needed ───────────────────────────
+    # "tor <action> @user" — no prefix needed
     tor_match = re.match(r'^tor\s+(\w+)', message.content, re.IGNORECASE)
     if tor_match:
         action  = tor_match.group(1).lower()
@@ -544,7 +547,7 @@ async def on_message(message: discord.Message):
     clean_msg = torie.clean_mention(message.content, bot.user.id)
     role_key  = _get_role_key(message.author)
 
-    # Empty mention — family greeting
+    # Empty mention — family greeting or generic prompt
     if not clean_msg and not message.stickers and not message.attachments:
         await message.reply(
             _GREETINGS.get(role_key, "Hey! You mentioned me — what do you need? 😊"),
@@ -562,7 +565,7 @@ async def on_message(message: discord.Message):
         await message.reply(_sanitize_reply(reply), mention_author=False)
         return
 
-    # Image
+    # Image attachment
     if message.attachments:
         att = message.attachments[0]
         if any(att.filename.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")):
@@ -581,37 +584,35 @@ async def on_message(message: discord.Message):
     lowered = clean_msg.lower()
     targets = [u for u in message.mentions if u != bot.user]
 
-# ── GIF interactions ──────────────────────────────────────────────────
+    # GIF interactions
     for action, (text_template, query) in _INTERACTION_ACTIONS.items():
         if re.search(rf'\b{action}\b', lowered) and targets:
             target  = targets[0]
             gif_url = await _search_klipy_gif(query)
             text    = text_template.format(target=target.mention)
-
-            embed = discord.Embed(description=text, color=discord.Color.pink())
+            embed   = discord.Embed(description=text, color=discord.Color.pink())
             if gif_url:
                 embed.set_image(url=gif_url)
             embed.set_footer(text="T.O.R.I.E. GIFs Powered by KLIPY GIF")
-
             await message.reply(embed=embed, mention_author=False)
             return
 
-    # ── Warn ──────────────────────────────────────────────────────────────
+    # Warn
     if targets and re.search(r'\bwarn\b', lowered):
         await _handle_warn(message, targets, clean_msg)
         return
 
-    # ── Mute ─────────────────────────────────────────────────────────────
+    # Mute
     if targets and re.search(r'\bmute\b', lowered) and not re.search(r'\bunmute\b', lowered):
         await _handle_mute(message, targets, clean_msg)
         return
 
-    # ── Unmute ───────────────────────────────────────────────────────────
+    # Unmute
     if targets and re.search(r'\bunmute\b', lowered):
         await _handle_unmute(message, targets)
         return
 
-    # ── Security ─────────────────────────────────────────────────────────
+    # Security check
     clean_msg, rejection = sanitize_input(clean_msg)
     if rejection == "too_long":
         await message.channel.send("⚠️ Too Long Didn't Read. Congratulations or Sorry for what happened 😅")
@@ -621,7 +622,6 @@ async def on_message(message: discord.Message):
         print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
         return
 
-    # ── AI reply ─────────────────────────────────────────────────────────
     await _handle_ai_reply(message, clean_msg, role_key)
 
 

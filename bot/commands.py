@@ -35,7 +35,7 @@ BROTHER_IN_LAW = {
     "broinlaw_haru": {"username": "Haru", "id": 800304284541124638, "title": "Brother in Law", "role": "In Law"},
 }
 
-# Flat lookup: user_id → role_key (built once at startup)
+# Flat lookups built once at startup
 _ID_TO_ROLE:   dict[int, str] = {}
 _NAME_TO_ROLE: dict[str, str] = {}
 for _group in (PARENTS, COUSIN, UNCLE, SISTER, BROTHER_IN_LAW):
@@ -52,8 +52,8 @@ def get_uncle_role(user)   -> str | None: r = get_role(user); return r if r in U
 def get_sister_role(user)  -> str | None: r = get_role(user); return r if r in SISTER         else None
 def get_brother_role(user) -> str | None: r = get_role(user); return r if r in BROTHER_IN_LAW else None
 
-HUSBAND = {}
-FRIENDS = {}
+HUSBAND  = {}
+FRIENDS  = {}
 
 FILTERED_WORDS = ["retard", "nigger", "nigga", "negro", "negra"]
 
@@ -235,13 +235,9 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# KLIPY GIF search
-#
-# Endpoint : GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
-# Params   : q (query string), limit (int)
-# Response : { "data": { "data": [ { "file": { "hd": { "gif": { "url": "..." } } } }, ... ] } }
-# ---------------------------------------------------------------------------
+# ---- Klipy GIF search ----
+# GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
+# Params: q (query string), limit (int)
 
 async def _search_klipy_gif(query: str) -> str | None:
     KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
@@ -276,6 +272,9 @@ async def _search_klipy_gif(query: str) -> str | None:
         print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
         return None
 
+
+# ---- Permission DB helpers ----
+
 def load_user_perms(user_id: int) -> set:
     col = get_perm_col()
     if col is None: return set()
@@ -304,16 +303,14 @@ def revoke_perm(user_id: int, perm: str) -> bool:
         print(f"⚠️ Failed to revoke perm: {e}"); return False
 
 def has_permission(user, perm: str) -> bool:
-    """Check if user has a permission via MongoDB grant OR family role defaults."""
-    db_perms = load_user_perms(user.id)
-    if "mod" in db_perms or perm in db_perms:
-        return True
+    """Check family role defaults first (no DB call), then fall back to DB grants."""
     role = get_role(user)
     if role:
         defaults = _FAMILY_DEFAULT_PERMS.get(role, set())
         if "mod" in defaults or perm in defaults:
             return True
-    return False
+    db_perms = load_user_perms(user.id)
+    return "mod" in db_perms or perm in db_perms
 
 
 # ---- Word filter ----
@@ -344,9 +341,23 @@ def normalize(text: str) -> str:
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     return re.sub(r'[^a-z0-9]', '', text)
 
+
+# Precomputed filter cache — rebuilt whenever FILTERED_WORDS mutates.
+# Call _rebuild_filter_cache() after any add/remove to FILTERED_WORDS.
+_NORM_SLURS:    dict[str, str] = {}
+_MAX_SLUR_LEN:  int            = 0
+
+def _rebuild_filter_cache() -> None:
+    global _NORM_SLURS, _MAX_SLUR_LEN
+    _NORM_SLURS   = {normalize(w): w for w in FILTERED_WORDS}
+    _MAX_SLUR_LEN = max(len(k) for k in _NORM_SLURS) if _NORM_SLURS else 0
+
+_rebuild_filter_cache()
+
+
 def contains_filtered_word(content: str) -> str | None:
     """
-    Two-pass filter with no false positives.
+    Two-pass filter.
 
     Pass 1 — per-token exact normalized match (word-boundary safe).
              Catches: nigger, n1gger, r3t4rd, retard.
@@ -354,27 +365,25 @@ def contains_filtered_word(content: str) -> str | None:
 
     Pass 2 — full-string evasion check, only when no token is long enough
              to span a complete slur (punctuation/space evasion like
-             n!gger, n.i.g.g.e.r, "n i g g e r"). Skips when a longer
-             legitimate word like "snigger" is present in the message.
+             n!gger, n.i.g.g.e.r, "n i g g e r").
     """
-    tokens       = re.findall(r'\b\w+\b', content.lower())
-    norm_slurs   = {normalize(w): w for w in FILTERED_WORDS}
-    max_slur_len = max(len(normalize(w)) for w in FILTERED_WORDS)
+    tokens = re.findall(r'\b\w+\b', content.lower())
 
     for token in tokens:
         if token in FILTER_WHITELIST:
             continue
-        if normalize(token) in norm_slurs:
-            return norm_slurs[normalize(token)]
+        if normalize(token) in _NORM_SLURS:
+            return _NORM_SLURS[normalize(token)]
 
     max_token_len = max((len(t) for t in tokens), default=0)
-    if max_token_len < max_slur_len:
+    if max_token_len < _MAX_SLUR_LEN:
         norm_full = normalize(content)
-        for slur in FILTERED_WORDS:
-            if normalize(slur) in norm_full:
-                return slur
+        for slur_norm, slur_orig in _NORM_SLURS.items():
+            if slur_norm in norm_full:
+                return slur_orig
 
     return None
+
 
 def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
@@ -384,6 +393,7 @@ def get_todays_birthdays() -> list[dict]:
         for key, data in BIRTHDAYS.items()
         if (data["month"], data["day"]) == today
     ]
+
 
 # ---------------------------------------------------------------------------
 # setup_commands — ALL bot command registrations live inside this function
@@ -467,6 +477,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description=f"⚠️ `{word}` is already in the filter list.", color=discord.Color.orange()))
             return
         FILTERED_WORDS.append(word)
+        _rebuild_filter_cache()
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Added `{word}` to the filter list. 👀", color=discord.Color.green()))
 
@@ -481,6 +492,7 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description=f"⚠️ `{word}` isn't in the filter list.", color=discord.Color.orange()))
             return
         FILTERED_WORDS.remove(matching[0])
+        _rebuild_filter_cache()
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green()))
 
@@ -507,6 +519,7 @@ def setup_commands(bot: commands.Bot):
             return
         count = len(FILTERED_WORDS)
         FILTERED_WORDS.clear()
+        _rebuild_filter_cache()
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} filtered word(s). 🧹", color=discord.Color.green()))
 
@@ -587,21 +600,25 @@ def setup_commands(bot: commands.Bot):
                 super().__init__(timeout=60)
                 self.page = 0
                 self.update_buttons()
+
             def update_buttons(self):
                 self.prev_btn.disabled = self.page == 0
                 self.next_btn.disabled = self.page >= total_pages - 1
+
             @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
             async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user != ctx.author:
                     await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True); return
                 self.page -= 1; self.update_buttons()
                 await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
             @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
             async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
                 if interaction.user != ctx.author:
                     await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True); return
                 self.page += 1; self.update_buttons()
                 await interaction.response.edit_message(embed=build_embed(self.page), view=self)
+
             async def on_timeout(self):
                 for child in self.children: child.disabled = True
                 try: await self.message.edit(view=self)
@@ -866,12 +883,7 @@ def setup_commands(bot: commands.Bot):
             print(f"❌ Purge error: {e}")
 
     # ---- Slash: /sendmsg ----
-    # Supports optional text, optional file attachment, optional reply_to message link.
-    # At least one of message or attachment must be provided.
-    # Files are downloaded from Discord's CDN and re-uploaded so T.O.R.I.E. appears as sender.
-    # Max attachment size enforced at 8 MB (safe without server Nitro boost).
 
-    # Regex to parse Discord message links — MUST stay inside setup_commands so `bot` is in scope
     _MSG_LINK_RE = re.compile(
         r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
         r"(\d+)/(\d+)/(\d+)"
@@ -906,7 +918,6 @@ def setup_commands(bot: commands.Bot):
         if message:
             message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
-        # ── Resolve the reply target ──────────────────────────────────────
         reference: discord.MessageReference | None = None
         if reply_to:
             match = _MSG_LINK_RE.search(reply_to)
@@ -948,7 +959,6 @@ def setup_commands(bot: commands.Bot):
                 )
                 return
 
-        # ── Download attachment if present ────────────────────────────────
         _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
         discord_file: discord.File | None = None
 
@@ -982,7 +992,6 @@ def setup_commands(bot: commands.Bot):
         else:
             await interaction.response.defer(ephemeral=True)
 
-        # ── Send ──────────────────────────────────────────────────────────
         try:
             await channel.send(
                 content   = message or None,

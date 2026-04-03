@@ -82,7 +82,6 @@ def get_queue(guild_id: int) -> list:
     return queues[guild_id]
 
 def clear_state(guild_id: int) -> None:
-    """FIX #7: fully remove guild state on disconnect instead of leaving stale keys."""
     queues.pop(guild_id, None)
     loop_song.pop(guild_id, None)
     loop_queue.pop(guild_id, None)
@@ -324,7 +323,6 @@ def spotify_album_tracks(url: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 async def fetch_playlist(url: str) -> list[dict]:
-    """FIX #1: removed redundant loop parameter — use asyncio.get_running_loop()."""
     loop = asyncio.get_running_loop()
     try:
         data = await loop.run_in_executor(
@@ -341,7 +339,6 @@ async def fetch_playlist(url: str) -> list[dict]:
                 "spotify":   None,
                 "deezer":    None,
                 "duration":  e.get("duration", 0),
-                # FIX #6: set query so resolve_audio always has a text search fallback
                 "query":     f"{e.get('title', '')} {e.get('uploader', '')}".strip(),
                 "audio_url": f"https://www.youtube.com/watch?v={e['id']}",
                 "yt_url":    f"https://www.youtube.com/watch?v={e['id']}",
@@ -354,7 +351,6 @@ async def fetch_playlist(url: str) -> list[dict]:
         return []
 
 async def resolve_audio(entry: dict) -> dict | None:
-    """FIX #1: no loop parameter — always use get_running_loop()."""
     loop = asyncio.get_running_loop()
     try:
         search = entry.get("query") or entry.get("audio_url") or entry["title"]
@@ -373,17 +369,23 @@ async def resolve_audio(entry: dict) -> dict | None:
         return None
 
 async def fetch_audio(query: str) -> dict | None:
-    """FIX #1: no loop parameter."""
     loop = asyncio.get_running_loop()
     try:
-        data = await loop.run_in_executor(
-            None, lambda: ytdl.extract_info(f"ytsearch:{query}", download=False)
+        # Don't prefix direct URLs with ytsearch: — only search queries need it
+        search = query if query.startswith("http") else f"ytsearch:{query}"
+        data   = await loop.run_in_executor(
+            None, lambda: ytdl.extract_info(search, download=False)
         )
-        if not data or "entries" not in data or not data["entries"]:
+        if not data:
             return None
-        e = data["entries"][0]
-        return {"url": e["url"], "title": e.get("title", "Unknown"),
-                "duration": e.get("duration", 0), "webpage": e.get("webpage_url", "")}
+        if "entries" in data:
+            data = data["entries"][0]
+        return {
+            "url":      data["url"],
+            "title":    data.get("title", "Unknown"),
+            "duration": data.get("duration", 0),
+            "webpage":  data.get("webpage_url", ""),
+        }
     except Exception as e:
         print(f"⚠️ yt-dlp fetch error: {e}")
         return None
@@ -426,22 +428,19 @@ async def _start_or_queue(ctx: commands.Context, entry: dict, vc: discord.VoiceC
     vc.play(source, after=after)
     await ctx.send(embed=now_playing_embed(entry, guild_id))
 
-    # FIX #5: pre-fetch next pending track while current song plays
-    _prefetch_next(ctx)
+    asyncio.create_task(_prefetch_next(ctx))
 
-def _prefetch_next(ctx: commands.Context) -> None:
-    """Schedule background resolution of the second queue entry."""
+async def _prefetch_next(ctx: commands.Context) -> None:
+    """Resolve the second queue entry in the background while the current song plays."""
     queue = get_queue(ctx.guild.id)
     if len(queue) < 2:
         return
     nxt = queue[1]
     if nxt.get("pending"):
-        async def _do():
-            resolved = await resolve_audio(nxt)
-            q = get_queue(ctx.guild.id)
-            if len(q) > 1 and q[1] is nxt and resolved:
-                q[1] = resolved
-        asyncio.run_coroutine_threadsafe(_do(), ctx.bot.loop)
+        resolved = await resolve_audio(nxt)
+        q = get_queue(ctx.guild.id)
+        if len(q) > 1 and q[1] is nxt and resolved:
+            q[1] = resolved
 
 async def _play_next(ctx: commands.Context) -> None:
     queue    = get_queue(ctx.guild.id)
@@ -454,7 +453,6 @@ async def _play_next(ctx: commands.Context) -> None:
     current = queue[0]
 
     if is_looping_song(guild_id):
-        # re-resolve if the URL might have expired
         if current.get("pending"):
             resolved = await resolve_audio(current)
             if not resolved:
@@ -497,11 +495,11 @@ async def _play_next(ctx: commands.Context) -> None:
 
     if not is_looping_song(guild_id):
         await ctx.send(embed=now_playing_embed(current, guild_id))
-        _prefetch_next(ctx)
+        asyncio.create_task(_prefetch_next(ctx))
 
 
 def play_next(ctx: commands.Context) -> None:
-    """Thin sync shim kept for external compatibility if needed."""
+    """Sync shim for external callers that need to schedule _play_next from a thread."""
     asyncio.run_coroutine_threadsafe(_play_next(ctx), ctx.bot.loop)
 
 
@@ -512,10 +510,7 @@ def play_next(ctx: commands.Context) -> None:
 def setup_music(bot: commands.Bot):
 
     async def _load_collection(ctx, tracks: list[dict], label: str, emoji: str, color: discord.Color) -> None:
-        """
-        FIX #3: single shared helper for all playlist/album branches.
-        Loads tracks into queue, sends confirmation embed, starts playback if idle.
-        """
+        """Shared helper for all playlist/album branches. Loads tracks and starts playback if idle."""
         vc = ctx.voice_client
         if not tracks:
             await ctx.send(embed=discord.Embed(
@@ -558,7 +553,6 @@ def setup_music(bot: commands.Bot):
         async with ctx.typing():
 
             if is_spotify_playlist(query):
-                # FIX #1: run_in_executor without explicit loop arg
                 tracks = await asyncio.get_running_loop().run_in_executor(
                     None, lambda: spotify_playlist_tracks(query)
                 )
@@ -633,7 +627,7 @@ def setup_music(bot: commands.Bot):
                 await _start_or_queue(ctx, entry, vc)
                 return
 
-            # ---- single song (search or direct YouTube URL) ----
+            # Single song — search or direct YouTube URL
             spotify_data = await asyncio.get_running_loop().run_in_executor(
                 None, lambda: spotify_track(query)
             )
@@ -833,7 +827,7 @@ def setup_music(bot: commands.Bot):
     async def stop(ctx):
         vc = ctx.voice_client
         if vc:
-            clear_state(ctx.guild.id)   # FIX #7: use clear_state to fully remove dict keys
+            clear_state(ctx.guild.id)
             await vc.disconnect()
             await ctx.send(embed=discord.Embed(description="⏹️ Stopped and disconnected. See ya! 👋", color=discord.Color.red()))
         else:
