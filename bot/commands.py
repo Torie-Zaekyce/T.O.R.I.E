@@ -1,17 +1,16 @@
 # commands.py — T.O.R.I.E.'s Bot Commands
- 
+
 import discord
 import re
 import os
+import random
+import aiohttp
 from datetime import datetime
 from discord.ext import commands
 import pymongo
-import aiohttp
-import random
-import os
 
 # ---- Family dicts ----
- 
+
 PARENTS = {
     "dad":  {"username": "TorieRingo", "id": 691976042910580767, "title": "Dad", "role": "Creator"},
     "mom":  {"username": "Nico",       "id": 816504106968940544, "title": "Mom", "role": "Co-Creator"},
@@ -34,7 +33,7 @@ SISTER = {
 BROTHER_IN_LAW = {
     "broinlaw_haru": {"username": "Haru", "id": 800304284541124638, "title": "Brother in Law", "role": "In Law"},
 }
- 
+
 # Flat lookup: user_id → role_key (built once at startup)
 _ID_TO_ROLE:   dict[int, str] = {}
 _NAME_TO_ROLE: dict[str, str] = {}
@@ -42,30 +41,29 @@ for _group in (PARENTS, COUSIN, UNCLE, SISTER, BROTHER_IN_LAW):
     for _key, _data in _group.items():
         _ID_TO_ROLE[_data["id"]]                = _key
         _NAME_TO_ROLE[_data["username"].lower()] = _key
- 
+
 def get_role(user) -> str | None:
     return _ID_TO_ROLE.get(user.id) or _NAME_TO_ROLE.get(str(user.name).lower())
- 
+
 def get_parent_role(user)  -> str | None: r = get_role(user); return r if r in PARENTS        else None
 def get_cousin_role(user)  -> str | None: r = get_role(user); return r if r in COUSIN         else None
 def get_uncle_role(user)   -> str | None: r = get_role(user); return r if r in UNCLE          else None
 def get_sister_role(user)  -> str | None: r = get_role(user); return r if r in SISTER         else None
 def get_brother_role(user) -> str | None: r = get_role(user); return r if r in BROTHER_IN_LAW else None
- 
+
 HUSBAND = {}
 FRIENDS = {}
- 
+
 FILTERED_WORDS = ["retard", "nigger", "nigga", "negro", "negra"]
- 
+
 # ---- MongoDB Store (shared client) ----
- 
+
 _mongo_client = None
 _birthday_col = None
 _filter_col   = None
-_whitelist_col = None
 _warn_col     = None
 _perm_col     = None
- 
+
 def _get_client():
     global _mongo_client
     if _mongo_client is None:
@@ -84,14 +82,14 @@ def _get_client():
         except Exception as e:
             print(f"⚠️ MongoDB connection failed: {e}")
     return _mongo_client
- 
+
 def get_birthday_col():
     global _birthday_col
     if _birthday_col is None:
         c = _get_client()
         if c: _birthday_col = c["torie"]["birthdays"]
     return _birthday_col
- 
+
 def get_filter_col():
     global _filter_col
     if _filter_col is None:
@@ -99,30 +97,23 @@ def get_filter_col():
         if c: _filter_col = c["torie"]["filtered_words"]
     return _filter_col
 
-def get_whitelist_col():
-    global _whitelist_col
-    if _whitelist_col is None:
-        c = _get_client()
-        if c: _whitelist_col = c["torie"]["whitelisted_words"]
-    return _whitelist_col
- 
 def get_warn_col():
     global _warn_col
     if _warn_col is None:
         c = _get_client()
         if c: _warn_col = c["torie"]["warns"]
     return _warn_col
- 
+
 def get_perm_col():
     global _perm_col
     if _perm_col is None:
         c = _get_client()
         if c: _perm_col = c["torie"]["permissions"]
     return _perm_col
- 
- 
+
+
 # ---- Birthday helpers ----
- 
+
 def load_birthdays() -> dict:
     col = get_birthday_col()
     if col is None: return {}
@@ -130,7 +121,7 @@ def load_birthdays() -> dict:
         return {doc["_id"]: {k: v for k, v in doc.items() if k != "_id"} for doc in col.find()}
     except Exception as e:
         print(f"⚠️ Failed to load birthdays: {e}"); return {}
- 
+
 def save_birthday(user_id: str, data: dict):
     col = get_birthday_col()
     if col is None: return
@@ -138,7 +129,7 @@ def save_birthday(user_id: str, data: dict):
         col.replace_one({"_id": user_id}, {"_id": user_id, **data}, upsert=True)
     except Exception as e:
         print(f"⚠️ Failed to save birthday: {e}")
- 
+
 def delete_birthday(user_id: str):
     col = get_birthday_col()
     if col is None: return
@@ -146,10 +137,10 @@ def delete_birthday(user_id: str):
         col.delete_one({"_id": user_id})
     except Exception as e:
         print(f"⚠️ Failed to delete birthday: {e}")
- 
- 
+
+
 # ---- Filter word helpers ----
- 
+
 def load_filter_words() -> list[str]:
     col = get_filter_col()
     if col is None: return []
@@ -158,7 +149,7 @@ def load_filter_words() -> list[str]:
         return doc["words"] if doc and "words" in doc else []
     except Exception as e:
         print(f"⚠️ Failed to load filter words: {e}"); return []
- 
+
 def save_filter_words():
     col = get_filter_col()
     if col is None: return
@@ -166,18 +157,18 @@ def save_filter_words():
         col.replace_one({"_id": "filter_list"}, {"_id": "filter_list", "words": FILTERED_WORDS}, upsert=True)
     except Exception as e:
         print(f"⚠️ Failed to save filter words: {e}")
- 
+
 def _init_filter_words():
     for word in load_filter_words():
         if word not in FILTERED_WORDS:
             FILTERED_WORDS.append(word)
- 
+
 _init_filter_words()
 BIRTHDAYS: dict = load_birthdays()
- 
- 
+
+
 # ---- Warn helpers ----
- 
+
 def load_warns(user_id: str) -> list:
     col = get_warn_col()
     if col is None: return []
@@ -186,7 +177,7 @@ def load_warns(user_id: str) -> list:
         return doc["warns"] if doc and "warns" in doc else []
     except Exception as e:
         print(f"⚠️ Failed to load warns: {e}"); return []
- 
+
 def add_warn(user_id: str, reason: str, mod_name: str) -> int:
     col = get_warn_col()
     if col is None: return 0
@@ -201,7 +192,7 @@ def add_warn(user_id: str, reason: str, mod_name: str) -> int:
         return len(doc["warns"]) if doc else 1
     except Exception as e:
         print(f"⚠️ Failed to add warn: {e}"); return 0
- 
+
 def clear_warns(user_id: str):
     col = get_warn_col()
     if col is None: return
@@ -209,12 +200,12 @@ def clear_warns(user_id: str):
         col.delete_one({"_id": user_id})
     except Exception as e:
         print(f"⚠️ Failed to clear warns: {e}")
- 
- 
+
+
 # ---- Permission helpers ----
- 
+
 VALID_PERMS = {"mute", "unmute", "filter", "personality", "purge", "sendmsg", "warn", "mod"}
- 
+
 # Family role → default permissions (without needing t!perm grant)
 _FAMILY_DEFAULT_PERMS: dict[str, set] = {
     "dad":           {"mod"},
@@ -244,14 +235,11 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
 
 
 # ---------------------------------------------------------------------------
-# KLIPY GIF search  (replaces Tenor — Tenor shuts down June 2026)
+# KLIPY GIF search
 #
 # Endpoint : GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
 # Params   : q (query string), limit (int)
-# API key  : embedded in the URL path, NOT a query param
-# Response : { "data": [ { "media": { "gif": { "url": "..." } } }, ... ] }
-#
-# Get your free key at https://klipy.com/developers
+# Response : { "data": { "data": [ { "file": { "hd": { "gif": { "url": "..." } } } }, ... ] } }
 # ---------------------------------------------------------------------------
 
 async def _search_klipy_gif(query: str) -> str | None:
@@ -266,13 +254,24 @@ async def _search_klipy_gif(query: str) -> str | None:
                 if resp.status != 200:
                     print(f"⚠️ Klipy GIF search returned HTTP {resp.status}")
                     return None
-                data = await resp.json()
+                data    = await resp.json()
                 results = data.get("data", {}).get("data", [])
                 if not results:
                     return None
                 random.shuffle(results)
-                item = random.choice(results)
-                return item["file"]["hd"]["gif"]["url"]
+                for item in results:
+                    # FIX: safely traverse nested keys with fallbacks
+                    try:
+                        gif_url = (
+                            item["file"]["hd"]["gif"]["url"]        # primary path
+                            if "file" in item
+                            else item["media"]["gif"]["url"]        # fallback path
+                        )
+                        if gif_url:
+                            return gif_url
+                    except (KeyError, TypeError):
+                        continue
+                return None
     except Exception as e:
         print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
         return None
@@ -285,7 +284,7 @@ def load_user_perms(user_id: int) -> set:
         return set(doc["perms"]) if doc and "perms" in doc else set()
     except Exception as e:
         print(f"⚠️ Failed to load permissions: {e}"); return set()
- 
+
 def grant_perm(user_id: int, perm: str) -> bool:
     col = get_perm_col()
     if col is None: return False
@@ -294,7 +293,7 @@ def grant_perm(user_id: int, perm: str) -> bool:
         return True
     except Exception as e:
         print(f"⚠️ Failed to grant perm: {e}"); return False
- 
+
 def revoke_perm(user_id: int, perm: str) -> bool:
     col = get_perm_col()
     if col is None: return False
@@ -303,7 +302,7 @@ def revoke_perm(user_id: int, perm: str) -> bool:
         return True
     except Exception as e:
         print(f"⚠️ Failed to revoke perm: {e}"); return False
- 
+
 def has_permission(user, perm: str) -> bool:
     """Check if user has a permission via MongoDB grant OR family role defaults."""
     db_perms = load_user_perms(user.id)
@@ -315,10 +314,10 @@ def has_permission(user, perm: str) -> bool:
         if "mod" in defaults or perm in defaults:
             return True
     return False
- 
- 
+
+
 # ---- Word filter ----
- 
+
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
@@ -338,21 +337,21 @@ FILTER_WHITELIST = {
     "assign", "assigned", "assignee", "significant",
     "vinegar", "renegade",
 }
- 
+
 def normalize(text: str) -> str:
     text = text.lower().translate(NORMALIZER)
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     return re.sub(r'[^a-z0-9]', '', text)
- 
+
 def contains_filtered_word(content: str) -> str | None:
     """
-    Two-pass filter with no false positives:
- 
+    Two-pass filter with no false positives.
+
     Pass 1 — per-token exact normalized match (word-boundary safe).
              Catches: nigger, n1gger, r3t4rd, retard.
              Skips:   snigger, retarding, enegra, sniggers.
- 
+
     Pass 2 — full-string evasion check, only when no token is long enough
              to span a complete slur (punctuation/space evasion like
              n!gger, n.i.g.g.e.r, "n i g g e r"). Skips when a longer
@@ -361,22 +360,22 @@ def contains_filtered_word(content: str) -> str | None:
     tokens       = re.findall(r'\b\w+\b', content.lower())
     norm_slurs   = {normalize(w): w for w in FILTERED_WORDS}
     max_slur_len = max(len(normalize(w)) for w in FILTERED_WORDS)
- 
+
     for token in tokens:
         if token in FILTER_WHITELIST:
             continue
         if normalize(token) in norm_slurs:
             return norm_slurs[normalize(token)]
- 
+
     max_token_len = max((len(t) for t in tokens), default=0)
     if max_token_len < max_slur_len:
         norm_full = normalize(content)
         for slur in FILTERED_WORDS:
             if normalize(slur) in norm_full:
                 return slur
- 
+
     return None
- 
+
 def get_todays_birthdays() -> list[dict]:
     now   = datetime.utcnow()
     today = (now.month, now.day)
@@ -385,11 +384,11 @@ def get_todays_birthdays() -> list[dict]:
         for key, data in BIRTHDAYS.items()
         if (data["month"], data["day"]) == today
     ]
- 
+
 def setup_commands(bot: commands.Bot):
 
     # ---- Help ----
- 
+
     @bot.command(name="help")
     async def help_command(ctx):
         embed = discord.Embed(
@@ -411,7 +410,7 @@ def setup_commands(bot: commands.Bot):
             "`@T.O.R.I.E. warn @user [reason]` — Warn + auto-mute 10min *(perm: warn)*\n"
             "`t!warns @user` — Check warn history\n"
             "`t!warns @user clear` — Clear warns *(perm: warn)*\n"
-            "`/sendmsg #channel <message>` — Anonymous message *(perm: sendmsg)*"
+            "`/sendmsg #channel <message> [attachment]` — Send a message with optional file *(perm: sendmsg)*"
         ))
         embed.add_field(name="🔑 Permissions", inline=False, value=(
             "`t!perm add @user <perm>` — Grant a permission *(parents only)*\n"
@@ -444,16 +443,16 @@ def setup_commands(bot: commands.Bot):
         ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
- 
+
     # ---- Filter ----
- 
+
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
         await ctx.send(embed=discord.Embed(
             description="Usage: `t!filter add <word>` | `t!filter remove <word>` | `t!filter list` | `t!filter clear`",
             color=discord.Color.red()
         ))
- 
+
     @filter_group.command(name="add")
     async def filter_add(ctx, *, word: str):
         if not has_permission(ctx.author, "filter"):
@@ -466,7 +465,7 @@ def setup_commands(bot: commands.Bot):
         FILTERED_WORDS.append(word)
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Added `{word}` to the filter list. 👀", color=discord.Color.green()))
- 
+
     @filter_group.command(name="remove")
     async def filter_remove(ctx, *, word: str):
         if not has_permission(ctx.author, "filter"):
@@ -480,7 +479,7 @@ def setup_commands(bot: commands.Bot):
         FILTERED_WORDS.remove(matching[0])
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Removed `{word}` from the filter list.", color=discord.Color.green()))
- 
+
     @filter_group.command(name="list")
     async def filter_list(ctx):
         if not has_permission(ctx.author, "filter"):
@@ -496,7 +495,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(FILTERED_WORDS)} word(s) currently filtered")
         await ctx.send(embed=embed)
- 
+
     @filter_group.command(name="clear")
     async def filter_clear(ctx):
         if not has_permission(ctx.author, "filter"):
@@ -506,9 +505,9 @@ def setup_commands(bot: commands.Bot):
         FILTERED_WORDS.clear()
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} filtered word(s). 🧹", color=discord.Color.green()))
- 
+
     # ---- Birthday ----
- 
+
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
         embed = discord.Embed(
@@ -523,7 +522,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text="Example: t!birthday add 03-15 → registers March 15")
         await ctx.send(embed=embed)
- 
+
     @birthday_group.command(name="add")
     async def birthday_add(ctx, date: str = None):
         if not date or len(date) > 10:
@@ -548,7 +547,7 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text="T.O.R.I.E. — marking the calendar 📅")
         await ctx.send(embed=embed)
- 
+
     @birthday_group.command(name="remove")
     async def birthday_remove(ctx):
         key = str(ctx.author.id)
@@ -558,7 +557,7 @@ def setup_commands(bot: commands.Bot):
         del BIRTHDAYS[key]
         delete_birthday(key)
         await ctx.send(embed=discord.Embed(description=f"✅ Removed your birthday, {ctx.author.mention}.", color=discord.Color.green()))
- 
+
     @birthday_group.command(name="list")
     async def birthday_list(ctx):
         if not BIRTHDAYS:
@@ -567,7 +566,7 @@ def setup_commands(bot: commands.Bot):
         sorted_entries = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"]))
         per_page    = 10
         total_pages = (len(sorted_entries) + per_page - 1) // per_page
- 
+
         def build_embed(page: int) -> discord.Embed:
             start = page * per_page
             lines = []
@@ -578,7 +577,7 @@ def setup_commands(bot: commands.Bot):
             embed = discord.Embed(title="🎂 Birthday List", description="\n".join(lines), color=discord.Color.from_rgb(255, 182, 193))
             embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} registered")
             return embed
- 
+
         class BirthdayView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=60)
@@ -603,10 +602,10 @@ def setup_commands(bot: commands.Bot):
                 for child in self.children: child.disabled = True
                 try: await self.message.edit(view=self)
                 except Exception: pass
- 
+
         view = BirthdayView()
         view.message = await ctx.send(embed=build_embed(0), view=view)
- 
+
     @birthday_group.command(name="today")
     async def birthday_today(ctx):
         todays = get_todays_birthdays()
@@ -622,44 +621,47 @@ def setup_commands(bot: commands.Bot):
             )
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
             await ctx.send(embed=embed)
- 
+
     # ---- Personality ----
- 
+
     @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
     async def personality_group(ctx):
         await ctx.send(embed=discord.Embed(
             description="Usage: `t!personality add <trait>` | `t!personality remove <number>` | `t!personality list` | `t!personality clear`",
             color=discord.Color.blurple()
         ))
- 
+
     @personality_group.command(name="add")
     async def personality_add(ctx, *, trait: str):
         if not has_permission(ctx.author, "personality"):
             await ctx.send(embed=discord.Embed(description="⛔ You don't have permission to update personality.", color=discord.Color.red()))
             return
-        from personality import CUSTOM_TRAITS
+        # FIX: correct import path matching the rest of the codebase
+        from bot.personality import CUSTOM_TRAITS
         CUSTOM_TRAITS.append(trait.strip())
         await ctx.send(embed=discord.Embed(
             title="🧠 Personality Updated!",
             description=f"New trait added: \"{trait.strip()}\"\nI'll keep that in mind! 🧠",
             color=discord.Color.blurple()
         ))
- 
+
     @personality_group.command(name="remove")
     async def personality_remove(ctx, index: int):
         if not has_permission(ctx.author, "personality"):
             await ctx.send(embed=discord.Embed(description="⛔ You don't have permission to update personality.", color=discord.Color.red()))
             return
-        from personality import CUSTOM_TRAITS
+        # FIX: correct import path
+        from bot.personality import CUSTOM_TRAITS
         if index < 1 or index > len(CUSTOM_TRAITS):
             await ctx.send(embed=discord.Embed(description="⚠️ Invalid number. Use `t!personality list` to see traits.", color=discord.Color.orange()))
             return
         removed = CUSTOM_TRAITS.pop(index - 1)
         await ctx.send(embed=discord.Embed(description=f"✅ Removed trait #{index}: \"{removed}\"", color=discord.Color.green()))
- 
+
     @personality_group.command(name="list")
     async def personality_list(ctx):
-        from personality import CUSTOM_TRAITS
+        # FIX: correct import path
+        from bot.personality import CUSTOM_TRAITS
         if not CUSTOM_TRAITS:
             await ctx.send(embed=discord.Embed(description="📋 No custom traits yet. Use `t!personality add <trait>`.", color=discord.Color.greyple()))
             return
@@ -670,19 +672,20 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(CUSTOM_TRAITS)} trait(s) active")
         await ctx.send(embed=embed)
- 
+
     @personality_group.command(name="clear")
     async def personality_clear(ctx):
         if not has_permission(ctx.author, "personality"):
             await ctx.send(embed=discord.Embed(description="⛔ You don't have permission to clear personality traits.", color=discord.Color.red()))
             return
-        from personality import CUSTOM_TRAITS
+        # FIX: correct import path
+        from bot.personality import CUSTOM_TRAITS
         count = len(CUSTOM_TRAITS)
         CUSTOM_TRAITS.clear()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} trait(s). Back to default me! 😊", color=discord.Color.green()))
- 
+
     # ---- Warns ----
- 
+
     @bot.command(name="warns")
     async def warns_cmd(ctx, member: discord.Member = None, action: str = None):
         if not member:
@@ -691,7 +694,7 @@ def setup_commands(bot: commands.Bot):
                 color=discord.Color.orange()
             ))
             return
- 
+
         if action and action.lower() == "clear":
             if not has_permission(ctx.author, "warn"):
                 await ctx.send(embed=discord.Embed(description="⛔ You don't have permission to clear warnings.", color=discord.Color.red()))
@@ -699,7 +702,7 @@ def setup_commands(bot: commands.Bot):
             clear_warns(str(member.id))
             await ctx.send(embed=discord.Embed(description=f"✅ Cleared all warnings for {member.mention}.", color=discord.Color.green()))
             return
- 
+
         warns = load_warns(str(member.id))
         if not warns:
             await ctx.send(embed=discord.Embed(description=f"✅ {member.mention} has no warnings. Clean record! 🌟", color=discord.Color.green()))
@@ -714,9 +717,9 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(warns)} warning(s) total")
         await ctx.send(embed=embed)
- 
+
     # ---- Permissions ----
- 
+
     @bot.group(name="perm", invoke_without_command=True)
     async def perm_group(ctx):
         await ctx.send(embed=discord.Embed(
@@ -730,7 +733,7 @@ def setup_commands(bot: commands.Bot):
             ),
             color = discord.Color.blurple()
         ))
- 
+
     @perm_group.command(name="add")
     async def perm_add(ctx, member: discord.Member, perm: str):
         if not get_parent_role(ctx.author):
@@ -742,7 +745,7 @@ def setup_commands(bot: commands.Bot):
             return
         grant_perm(member.id, perm)
         await ctx.send(embed=discord.Embed(description=f"✅ Granted `{perm}` to {member.mention}.", color=discord.Color.green()))
- 
+
     @perm_group.command(name="remove")
     async def perm_remove(ctx, member: discord.Member, perm: str):
         if not get_parent_role(ctx.author):
@@ -751,7 +754,7 @@ def setup_commands(bot: commands.Bot):
         perm = perm.lower()
         revoke_perm(member.id, perm)
         await ctx.send(embed=discord.Embed(description=f"✅ Revoked `{perm}` from {member.mention}.", color=discord.Color.green()))
- 
+
     @perm_group.command(name="list")
     async def perm_list(ctx, member: discord.Member = None):
         target      = member or ctx.author
@@ -771,9 +774,9 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.blurple()
         )
         await ctx.send(embed=embed)
- 
+
     # ---- General ----
- 
+
     _WHOAMI_RESPONSES = {
         "dad":           "You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂",
         "mom":           "You're my Mom — the co-creator! 💙 Half of what I am is because of you.",
@@ -802,15 +805,15 @@ def setup_commands(bot: commands.Bot):
         "sister_kio":    "Sister Kio! 🩷 What crazy thing shall we do today? 💖",
         "broinlaw_haru": "Brother in law! 🖤 What crazy thing today? Except flirting with my big sister. 💢",
     }
- 
+
     @bot.command(name="whoami")
     async def whoami(ctx):
         await ctx.send(_WHOAMI_RESPONSES.get(get_role(ctx.author), "Hello! valued member of this server! 😊 Not a creator, but still cool."))
- 
+
     @bot.command(name="greet")
     async def greet(ctx):
         await ctx.send(_GREET_RESPONSES.get(get_role(ctx.author), "Heya! 👋 Good to see you around here!"))
- 
+
     @bot.command(name="family")
     async def family(ctx):
         embed = discord.Embed(
@@ -832,7 +835,7 @@ def setup_commands(bot: commands.Bot):
         embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",           inline=False)
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
- 
+
     @bot.command(name="ping")
     async def ping(ctx):
         latency = round(bot.latency * 1000)
@@ -841,9 +844,9 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.green() if latency < 100 else discord.Color.orange()
         )
         await ctx.send(embed=embed)
- 
+
     # ---- Purge ----
- 
+
     @bot.command(name="purge")
     async def purge(ctx, amount: int = None):
         if not has_permission(ctx.author, "purge"):
@@ -861,31 +864,107 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description="⛔ I don't have permission to delete messages here.", color=discord.Color.red()))
         except Exception as e:
             print(f"❌ Purge error: {e}")
- 
+
     # ---- Slash: /sendmsg ----
-    
-    @bot.tree.command(name="sendmsg", description="Send an anonymous message to a channel as T.O.R.I.E.")
-    @discord.app_commands.describe(channel="The channel to send to", message="The message to send")
-    async def sendmsg(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+    # Supports optional text message, optional file attachment (image/video/file).
+    # At least one of message or attachment must be provided.
+    # Files are downloaded from Discord's CDN and re-uploaded so T.O.R.I.E. appears as the sender.
+
+    # Discord's file size limit for bots without Nitro boost is 8 MB (25 MB in boosted servers).
+    # We enforce 8 MB to be safe.
+    _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024  # 8 MB
+
+    @bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
+    @discord.app_commands.describe(
+        channel    = "The channel to send to",
+        message    = "The text message to send (optional if attachment provided)",
+        attachment = "A file, image, or video to attach (optional if message provided)",
+    )
+    async def sendmsg(
+        interaction: discord.Interaction,
+        channel:     discord.TextChannel,
+        message:     str | None                = None,
+        attachment:  discord.Attachment | None = None,
+    ):
         if not has_permission(interaction.user, "sendmsg"):
             await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
             return
-        if not message.strip():
-            await interaction.response.send_message("⚠️ Message cannot be empty.", ephemeral=True)
+
+        # Must provide at least one of message or attachment
+        if not message and not attachment:
+            await interaction.response.send_message("⚠️ You must provide a message, an attachment, or both.", ephemeral=True)
             return
-        if len(message) > 2000:
-            await interaction.response.send_message("⚠️ Message is too long (max 2000 chars).", ephemeral=True)
+
+        # Validate text length
+        if message and len(message) > 2000:
+            await interaction.response.send_message("⚠️ Message is too long (max 2000 characters).", ephemeral=True)
             return
-        message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+
+        # Sanitize mentions in text
+        if message:
+            message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+
+        # Validate and download the attachment if present
+        discord_file: discord.File | None = None
+        if attachment:
+            if attachment.size > _MAX_ATTACHMENT_BYTES:
+                await interaction.response.send_message(
+                    f"⚠️ Attachment is too large ({attachment.size / 1024 / 1024:.1f} MB). Maximum is 8 MB.",
+                    ephemeral=True
+                )
+                return
+
+            # Defer so we have time to download without hitting the 3-second interaction timeout
+            await interaction.response.defer(ephemeral=True)
+
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment.url) as resp:
+                        if resp.status != 200:
+                            await interaction.followup.send(
+                                f"❌ Failed to download the attachment (HTTP {resp.status}). Try again.",
+                                ephemeral=True
+                            )
+                            return
+                        file_bytes = await resp.read()
+
+                import io
+                discord_file = discord.File(
+                    fp       = io.BytesIO(file_bytes),
+                    filename = attachment.filename,
+                    # Preserve spoiler tag if the original had it
+                    spoiler  = attachment.filename.startswith("SPOILER_"),
+                )
+            except Exception as e:
+                print(f"❌ /sendmsg attachment download error: {e}")
+                await interaction.followup.send("❌ Something went wrong while downloading the attachment.", ephemeral=True)
+                return
+        else:
+            # No attachment — we can respond immediately without deferring
+            await interaction.response.defer(ephemeral=True)
+
+        # Send the message to the target channel
         try:
-            await channel.send(message)
-            await interaction.response.send_message(f"✅ Message sent to {channel.mention}.", ephemeral=True)
-            print(f"📨 /sendmsg by {interaction.user} → #{channel.name}")
+            await channel.send(
+                content = message or None,
+                file    = discord_file or discord.utils.MISSING,
+            )
+            parts = []
+            if message:     parts.append("message")
+            if discord_file: parts.append(f"attachment (`{attachment.filename}`)")
+            await interaction.followup.send(
+                f"✅ Sent {' and '.join(parts)} to {channel.mention}.",
+                ephemeral=True
+            )
+            print(f"📨 /sendmsg by {interaction.user} → #{channel.name}"
+                  + (f" [file: {attachment.filename}]" if attachment else ""))
         except discord.Forbidden:
-            await interaction.response.send_message(f"⛔ No permission to send in {channel.mention}.", ephemeral=True)
+            await interaction.followup.send(f"⛔ I don't have permission to send in {channel.mention}.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message("❌ Something went wrong.", ephemeral=True)
-            print(f"❌ /sendmsg error: {e}")
+            await interaction.followup.send("❌ Something went wrong while sending.", ephemeral=True)
+            print(f"❌ /sendmsg send error: {e}")
+
+    # ---- Interaction helpers ----
 
     async def _run_interaction(ctx, target: discord.Member, action: str):
         if action not in _INTERACTION_ACTIONS:
