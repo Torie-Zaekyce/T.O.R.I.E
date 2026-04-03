@@ -872,97 +872,145 @@ def setup_commands(bot: commands.Bot):
 
     # Discord's file size limit for bots without Nitro boost is 8 MB (25 MB in boosted servers).
     # We enforce 8 MB to be safe.
-    _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024  # 8 MB
+    # Regex to parse Discord message links
+_MSG_LINK_RE = re.compile(
+    r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
+    r"(\d+)/(\d+)/(\d+)"
+)
 
-    @bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
-    @discord.app_commands.describe(
-        channel    = "The channel to send to",
-        message    = "The text message to send (optional if attachment provided)",
-        attachment = "A file, image, or video to attach (optional if message provided)",
-    )
-    async def sendmsg(
-        interaction: discord.Interaction,
-        channel:     discord.TextChannel,
-        message:     str | None                = None,
-        attachment:  discord.Attachment | None = None,
-    ):
-        if not has_permission(interaction.user, "sendmsg"):
-            await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
-            return
+@bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
+@discord.app_commands.describe(
+    channel    = "The channel to send to",
+    message    = "The text message to send (optional if attachment provided)",
+    attachment = "A file, image, or video to attach (optional if message provided)",
+    reply_to   = "Paste a message link to reply to a specific message (optional)",
+)
+async def sendmsg(
+    interaction: discord.Interaction,
+    channel:     discord.TextChannel,
+    message:     str | None                = None,
+    attachment:  discord.Attachment | None = None,
+    reply_to:    str | None                = None,
+):
+    if not has_permission(interaction.user, "sendmsg"):
+        await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
+        return
 
-        # Must provide at least one of message or attachment
-        if not message and not attachment:
-            await interaction.response.send_message("⚠️ You must provide a message, an attachment, or both.", ephemeral=True)
-            return
+    if not message and not attachment:
+        await interaction.response.send_message("⚠️ You must provide a message, an attachment, or both.", ephemeral=True)
+        return
 
-        # Validate text length
-        if message and len(message) > 2000:
-            await interaction.response.send_message("⚠️ Message is too long (max 2000 characters).", ephemeral=True)
-            return
+    if message and len(message) > 2000:
+        await interaction.response.send_message("⚠️ Message is too long (max 2000 characters).", ephemeral=True)
+        return
 
-        # Sanitize mentions in text
-        if message:
-            message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+    if message:
+        message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
-        # Validate and download the attachment if present
-        discord_file: discord.File | None = None
-        if attachment:
-            if attachment.size > _MAX_ATTACHMENT_BYTES:
-                await interaction.response.send_message(
-                    f"⚠️ Attachment is too large ({attachment.size / 1024 / 1024:.1f} MB). Maximum is 8 MB.",
-                    ephemeral=True
-                )
-                return
-
-            # Defer so we have time to download without hitting the 3-second interaction timeout
-            await interaction.response.defer(ephemeral=True)
-
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(attachment.url) as resp:
-                        if resp.status != 200:
-                            await interaction.followup.send(
-                                f"❌ Failed to download the attachment (HTTP {resp.status}). Try again.",
-                                ephemeral=True
-                            )
-                            return
-                        file_bytes = await resp.read()
-
-                import io
-                discord_file = discord.File(
-                    fp       = io.BytesIO(file_bytes),
-                    filename = attachment.filename,
-                    # Preserve spoiler tag if the original had it
-                    spoiler  = attachment.filename.startswith("SPOILER_"),
-                )
-            except Exception as e:
-                print(f"❌ /sendmsg attachment download error: {e}")
-                await interaction.followup.send("❌ Something went wrong while downloading the attachment.", ephemeral=True)
-                return
-        else:
-            # No attachment — we can respond immediately without deferring
-            await interaction.response.defer(ephemeral=True)
-
-        # Send the message to the target channel
-        try:
-            await channel.send(
-                content = message or None,
-                file    = discord_file or discord.utils.MISSING,
-            )
-            parts = []
-            if message:     parts.append("message")
-            if discord_file: parts.append(f"attachment (`{attachment.filename}`)")
-            await interaction.followup.send(
-                f"✅ Sent {' and '.join(parts)} to {channel.mention}.",
+    # ── Resolve the reply target ──────────────────────────────────────────
+    reference: discord.MessageReference | None = None
+    if reply_to:
+        match = _MSG_LINK_RE.search(reply_to)
+        if not match:
+            await interaction.response.send_message(
+                "⚠️ Invalid message link. Right-click a message → **Copy Message Link** and paste it here.",
                 ephemeral=True
             )
-            print(f"📨 /sendmsg by {interaction.user} → #{channel.name}"
-                  + (f" [file: {attachment.filename}]" if attachment else ""))
+            return
+
+        link_guild_id   = int(match.group(1))
+        link_channel_id = int(match.group(2))
+        link_message_id = int(match.group(3))
+
+        # Must be in the same server
+        if link_guild_id != interaction.guild_id:
+            await interaction.response.send_message(
+                "⚠️ That message link is from a different server.", ephemeral=True
+            )
+            return
+
+        # Must be in the same channel we're sending to
+        if link_channel_id != channel.id:
+            await interaction.response.send_message(
+                f"⚠️ That message is in a different channel. The reply must be in {channel.mention}.",
+                ephemeral=True
+            )
+            return
+
+        try:
+            target_msg = await channel.fetch_message(link_message_id)
+            reference  = target_msg.to_reference(fail_if_not_exists=False)
+        except discord.NotFound:
+            await interaction.response.send_message(
+                "⚠️ Couldn't find that message. It may have been deleted.", ephemeral=True
+            )
+            return
         except discord.Forbidden:
-            await interaction.followup.send(f"⛔ I don't have permission to send in {channel.mention}.", ephemeral=True)
+            await interaction.response.send_message(
+                "⛔ I don't have permission to read messages in that channel.", ephemeral=True
+            )
+            return
+
+    # ── Download attachment if present ────────────────────────────────────
+    discord_file: discord.File | None = None
+    _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+
+    if attachment:
+        if attachment.size > _MAX_ATTACHMENT_BYTES:
+            await interaction.response.send_message(
+                f"⚠️ Attachment too large ({attachment.size / 1024 / 1024:.1f} MB). Max is 8 MB.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            import io
+            async with aiohttp.ClientSession() as session:
+                async with session.get(attachment.url) as resp:
+                    if resp.status != 200:
+                        await interaction.followup.send(
+                            f"❌ Failed to download attachment (HTTP {resp.status}).", ephemeral=True
+                        )
+                        return
+                    discord_file = discord.File(
+                        fp       = io.BytesIO(await resp.read()),
+                        filename = attachment.filename,
+                        spoiler  = attachment.filename.startswith("SPOILER_"),
+                    )
         except Exception as e:
-            await interaction.followup.send("❌ Something went wrong while sending.", ephemeral=True)
-            print(f"❌ /sendmsg send error: {e}")
+            print(f"❌ /sendmsg attachment error: {e}")
+            await interaction.followup.send("❌ Failed to download the attachment.", ephemeral=True)
+            return
+    else:
+        await interaction.response.defer(ephemeral=True)
+
+    # ── Send ──────────────────────────────────────────────────────────────
+    try:
+        await channel.send(
+            content   = message or None,
+            file      = discord_file or discord.utils.MISSING,
+            reference = reference or discord.utils.MISSING,
+        )
+        parts = []
+        if message:      parts.append("message")
+        if discord_file: parts.append(f"attachment (`{attachment.filename}`)")
+        reply_note = " as a reply" if reference else ""
+        await interaction.followup.send(
+            f"✅ Sent {' and '.join(parts)}{reply_note} in {channel.mention}.",
+            ephemeral=True
+        )
+        print(
+            f"📨 /sendmsg by {interaction.user} → #{channel.name}"
+            + (" [reply]" if reference else "")
+            + (f" [file: {attachment.filename}]" if attachment else "")
+        )
+    except discord.Forbidden:
+        await interaction.followup.send(f"⛔ No permission to send in {channel.mention}.", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send("❌ Something went wrong.", ephemeral=True)
+        print(f"❌ /sendmsg error: {e}")
 
     # ---- Interaction helpers ----
 
