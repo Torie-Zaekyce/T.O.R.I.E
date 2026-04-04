@@ -3,16 +3,15 @@ from discord.ext import commands, tasks
 from groq import Groq
 from bot.personality import ToriePersonality
 from bot.commands import (
-    setup_commands, get_parent_role, get_cousin_role, get_uncle_role,
-    get_sister_role, get_brother_role, contains_filtered_word,
-    get_todays_birthdays, has_permission, add_warn,
+    setup_commands, get_parent_role,
+    contains_filtered_word, get_todays_birthdays,
+    has_permission, add_warn,
     _INTERACTION_ACTIONS, _search_klipy_gif
 )
 from bot.music import setup_music
 from bot.greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
 from datetime import datetime, timedelta as _td
 from dotenv import load_dotenv
-import aiohttp
 import pytz
 import random
 import asyncio

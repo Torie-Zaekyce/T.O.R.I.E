@@ -234,6 +234,15 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
     "fuck":  ("*holds {target}'s hand! 🥺👉👈*",              "anime holding hands"),
 }
 
+# Max file size for /sendmsg (8 MB — safe without Nitro boost)
+_MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+
+# Regex to parse Discord message links
+_MSG_LINK_RE = re.compile(
+    r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
+    r"(\d+)/(\d+)/(\d+)"
+)
+
 
 # ---- Klipy GIF search ----
 # GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
@@ -344,8 +353,8 @@ def normalize(text: str) -> str:
 
 # Precomputed filter cache — rebuilt whenever FILTERED_WORDS mutates.
 # Call _rebuild_filter_cache() after any add/remove to FILTERED_WORDS.
-_NORM_SLURS:    dict[str, str] = {}
-_MAX_SLUR_LEN:  int            = 0
+_NORM_SLURS:   dict[str, str] = {}
+_MAX_SLUR_LEN: int            = 0
 
 def _rebuild_filter_cache() -> None:
     global _NORM_SLURS, _MAX_SLUR_LEN
@@ -884,11 +893,6 @@ def setup_commands(bot: commands.Bot):
 
     # ---- Slash: /sendmsg ----
 
-    _MSG_LINK_RE = re.compile(
-        r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
-        r"(\d+)/(\d+)/(\d+)"
-    )
-
     @bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
     @discord.app_commands.describe(
         channel    = "The channel to send to",
@@ -918,6 +922,8 @@ def setup_commands(bot: commands.Bot):
         if message:
             message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
+        # All validation paths below respond and return before we defer,
+        # keeping the interaction state consistent when we reach the send step.
         reference: discord.MessageReference | None = None
         if reply_to:
             match = _MSG_LINK_RE.search(reply_to)
@@ -958,8 +964,17 @@ def setup_commands(bot: commands.Bot):
                     "⛔ I don't have permission to read messages in that channel.", ephemeral=True
                 )
                 return
+            except Exception as e:
+                # Catches unexpected HTTP errors or network failures from fetch_message.
+                # Without this, the exception would propagate and leave the interaction
+                # without any response, showing "The application did not respond" to the user.
+                print(f"❌ /sendmsg fetch_message error: {type(e).__name__}: {e}")
+                await interaction.response.send_message(
+                    "❌ Failed to fetch the reply target. Please try again.", ephemeral=True
+                )
+                return
 
-        _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+        # Defer once, right before any slow I/O (download or channel.send).
         discord_file: discord.File | None = None
 
         if attachment:
@@ -986,18 +1001,22 @@ def setup_commands(bot: commands.Bot):
                             spoiler  = attachment.filename.startswith("SPOILER_"),
                         )
             except Exception as e:
-                print(f"❌ /sendmsg attachment error: {e}")
+                print(f"❌ /sendmsg attachment download error: {type(e).__name__}: {e}")
                 await interaction.followup.send("❌ Failed to download the attachment.", ephemeral=True)
                 return
         else:
             await interaction.response.defer(ephemeral=True)
 
+        # Build send kwargs explicitly rather than passing discord.utils.MISSING as keyword
+        # arguments, which can behave inconsistently across discord.py patch versions.
+        send_kwargs: dict = {}
+        if message:      send_kwargs["content"]   = message
+        if discord_file: send_kwargs["file"]      = discord_file
+        if reference:    send_kwargs["reference"] = reference
+
         try:
-            await channel.send(
-                content   = message or None,
-                file      = discord_file or discord.utils.MISSING,
-                reference = reference or discord.utils.MISSING,
-            )
+            await channel.send(**send_kwargs)
+
             parts = []
             if message:      parts.append("message")
             if discord_file: parts.append(f"attachment (`{attachment.filename}`)")
@@ -1013,9 +1032,12 @@ def setup_commands(bot: commands.Bot):
             )
         except discord.Forbidden:
             await interaction.followup.send(f"⛔ No permission to send in {channel.mention}.", ephemeral=True)
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ Discord rejected the message (HTTP {e.status}: {e.text}).", ephemeral=True)
+            print(f"❌ /sendmsg HTTPException: {e.status} {e.text}")
         except Exception as e:
             await interaction.followup.send("❌ Something went wrong.", ephemeral=True)
-            print(f"❌ /sendmsg error: {e}")
+            print(f"❌ /sendmsg error: {type(e).__name__}: {e}")
 
     # ---- Interaction helpers ----
 
