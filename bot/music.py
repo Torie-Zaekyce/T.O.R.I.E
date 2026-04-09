@@ -15,17 +15,19 @@ from discord.ext import commands
 # Configuration
 # ---------------------------------------------------------------------------
 
-YTDL_OPTIONS = {
-    "format":             "bestaudio/best",
-    "quiet":              True,
-    "no_warnings":        True,
-    "default_search":     "ytsearch",
-    "source_address":     "0.0.0.0",
-    "nocheckcertificate": True,
-    "ignoreerrors":       False,
-    "logtostderr":        False,
-    "cookiesfrombrowser": None,
-    "extractor_args":     {"youtube": {"skip": ["dash", "hls"]}},
+YDL_OPTS = {
+    "format":        "bestaudio/best",
+    "quiet":         True,
+    "no_warnings":   True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["web"],
+        }
+    },
+    "postprocessors": [{
+        "key":            "FFmpegExtractAudio",
+        "preferredcodec": "opus",
+    }],
 }
 
 YTDL_OPTIONS_PLAYLIST = {
