@@ -15,7 +15,7 @@ from discord.ext import commands
 # Configuration
 # ---------------------------------------------------------------------------
 
-YDL_OPTS = {
+YDL_OPTIONS = {
     "format":        "bestaudio/best",
     "quiet":         True,
     "no_warnings":   True,
