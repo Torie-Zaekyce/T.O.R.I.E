@@ -62,7 +62,7 @@ DINNER_MINUTE      = 30
 EVENING_HOUR       = 19
 MIDNIGHT_HOUR      = 0
 GENERAL_CHANNEL    = 1242875666265800806
-BIRTHDAY_CHANNEL   = 1449335277880348733
+BIRTHDAY_CHANNEL   = 1242875666265800806
 BIRTHDAY_PING_ROLE = 1242887610586628166
 MUTED_ROLE_ID      = 1447475985988587661
 MUTED_CHANNEL_ID   = 1447475213842251796
@@ -456,7 +456,7 @@ async def scheduled_announcements():
     elif now.hour == MIDNIGHT_HOUR and now.minute == 0:
         await channel.send(random.choice(MIDNIGHT_GREETINGS)); print("✅ Midnight greeting sent")
 
-    if now.hour == 1 and now.minute == 0:
+    if now.hour == 10 and now.minute == 0:
         birthdays = get_todays_birthdays()
         if birthdays:
             bday_ch = bot.get_channel(BIRTHDAY_CHANNEL)
@@ -467,8 +467,8 @@ async def scheduled_announcements():
                 role_ping    = f"<@&{BIRTHDAY_PING_ROLE}>" if BIRTHDAY_PING_ROLE else ""
                 embed = discord.Embed(
                     description=(
-                        f"𝑰𝒕'𝒔 𝒂 𝒔𝒕𝒂𝒓'𝒔 𝒔𝒑𝒆𝒄𝒊𝒂𝒍 𝒅𝒂𝒚 𝒕𝒐𝒅𝒂𝒚 🎂❤️\n"
-                        f"𝑾𝒊𝒔𝒉 {user_mention} 𝒂 𝒉𝒂𝒑𝒑𝒚 𝒃𝒊𝒓𝒕𝒉𝒅𝒂𝒚! 🎉🎈"
+                        f"Looks Like it's the special day for someone! 🎂🎇\n"
+                        f"Let's Wish {user_mention} a happy birthday! 🎉🎈"
                     ),
                     color=discord.Color.gold()
                 )
