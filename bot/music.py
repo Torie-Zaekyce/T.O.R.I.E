@@ -16,11 +16,14 @@ from discord.ext import commands
 # ---------------------------------------------------------------------------
 
 YTDL_OPTIONS = {
-    "format":           "bestaudio/best",
-    "quiet":            True,
-    "no_warnings":      True,
-    "cookiefile":       "/home/ubuntu/T.O.R.I.E./cookies.txt",
-    "source_address":   "0.0.0.0",
+    "format":        "bestaudio/best",
+    "quiet":         True,
+    "no_warnings":   True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["web"],
+        }
+    },
     "postprocessors": [{
         "key":            "FFmpegExtractAudio",
         "preferredcodec": "opus",
@@ -34,7 +37,7 @@ YTDL_OPTIONS_PLAYLIST = {
     "extract_flat":       "in_playlist",
     "source_address":     "0.0.0.0",
     "nocheckcertificate": True,
-    "cookiefile":         "/home/ubuntu/T.O.R.I.E./cookies.txt",
+    "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
 }
 
 FFMPEG_OPTIONS = {
@@ -65,7 +68,7 @@ def get_spotify() -> spotipy.Spotify | None:
         return None
     if _sp_client is None:
         try:
-            auth       = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
+            auth      = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
             _sp_client = spotipy.Spotify(auth_manager=auth)
         except Exception as e:
             print(f"⚠️ Spotify init error: {e}")
@@ -108,12 +111,12 @@ def now_playing_embed(entry: dict, guild_id: int) -> discord.Embed:
     if entry.get("art"):
         embed.set_thumbnail(url=entry["art"])
     if entry.get("album"):
-        embed.add_field(name="Album",    value=entry["album"],                    inline=True)
-    embed.add_field(    name="Duration", value=format_duration(entry["duration"]), inline=True)
+        embed.add_field(name="Album",    value=entry["album"],                     inline=True)
+    embed.add_field(    name="Duration", value=format_duration(entry["duration"]),  inline=True)
     if entry.get("spotify"):
-        embed.add_field(name="Spotify",  value=f"[Open]({entry['spotify']})",      inline=True)
+        embed.add_field(name="Spotify",  value=f"[Open]({entry['spotify']})",       inline=True)
     if entry.get("deezer"):
-        embed.add_field(name="Deezer",   value=f"[Open]({entry['deezer']})",       inline=True)
+        embed.add_field(name="Deezer",   value=f"[Open]({entry['deezer']})",        inline=True)
     if is_looping_song(guild_id):
         embed.set_footer(text="🔂 Song loop is ON")
     elif is_looping_queue(guild_id):
@@ -170,20 +173,6 @@ def _dz_entry(track, album_art=None) -> dict:
         "yt_url":    None,
         "pending":   True,
     }
-
-def deezer_search(query: str) -> dict | None:
-    """Search Deezer by keyword and return the best matching track entry."""
-    try:
-        results = _dz.search(query)
-        if not results:
-            return None
-        track = results[0]
-        entry = _dz_entry(track)
-        entry["pending"] = False
-        return entry
-    except Exception as e:
-        print(f"⚠️ Deezer search error: {e}")
-        return None
 
 def deezer_track(url: str) -> dict | None:
     try:
@@ -332,7 +321,7 @@ def spotify_album_tracks(url: str) -> list[dict]:
         return []
 
 # ---------------------------------------------------------------------------
-# YouTube audio fetchers (yt-dlp — audio only, not used for search)
+# YouTube fetchers
 # ---------------------------------------------------------------------------
 
 async def fetch_playlist(url: str) -> list[dict]:
@@ -364,7 +353,6 @@ async def fetch_playlist(url: str) -> list[dict]:
         return []
 
 async def resolve_audio(entry: dict) -> dict | None:
-    """Resolve a pending entry's audio URL via yt-dlp (YouTube audio only)."""
     loop = asyncio.get_running_loop()
     try:
         search = entry.get("query") or entry.get("audio_url") or entry["title"]
@@ -383,9 +371,9 @@ async def resolve_audio(entry: dict) -> dict | None:
         return None
 
 async def fetch_audio(query: str) -> dict | None:
-    """Fetch audio URL from YouTube via yt-dlp. Used only after metadata is found."""
     loop = asyncio.get_running_loop()
     try:
+        # Don't prefix direct URLs with ytsearch: — only search queries need it
         search = query if query.startswith("http") else f"ytsearch:{query}"
         data   = await loop.run_in_executor(
             None, lambda: ytdl.extract_info(search, download=False)
@@ -410,6 +398,11 @@ def _make_source(audio_url: str) -> discord.PCMVolumeTransformer:
     return discord.PCMVolumeTransformer(raw, volume=DEFAULT_VOLUME)
 
 async def _start_or_queue(ctx: commands.Context, entry: dict, vc: discord.VoiceClient) -> None:
+    """
+    If nothing is playing: resolve the entry and start playback immediately.
+    If something is already playing: just send the queued embed.
+    Pre-fetches the next pending track in the background while the current one plays.
+    """
     queue    = get_queue(ctx.guild.id)
     guild_id = ctx.guild.id
 
@@ -436,9 +429,11 @@ async def _start_or_queue(ctx: commands.Context, entry: dict, vc: discord.VoiceC
 
     vc.play(source, after=after)
     await ctx.send(embed=now_playing_embed(entry, guild_id))
+
     asyncio.create_task(_prefetch_next(ctx))
 
 async def _prefetch_next(ctx: commands.Context) -> None:
+    """Resolve the second queue entry in the background while the current song plays."""
     queue = get_queue(ctx.guild.id)
     if len(queue) < 2:
         return
@@ -506,6 +501,7 @@ async def _play_next(ctx: commands.Context) -> None:
 
 
 def play_next(ctx: commands.Context) -> None:
+    """Sync shim for external callers that need to schedule _play_next from a thread."""
     asyncio.run_coroutine_threadsafe(_play_next(ctx), ctx.bot.loop)
 
 
@@ -516,6 +512,7 @@ def play_next(ctx: commands.Context) -> None:
 def setup_music(bot: commands.Bot):
 
     async def _load_collection(ctx, tracks: list[dict], label: str, emoji: str, color: discord.Color) -> None:
+        """Shared helper for all playlist/album branches. Loads tracks and starts playback if idle."""
         vc = ctx.voice_client
         if not tracks:
             await ctx.send(embed=discord.Embed(
@@ -551,13 +548,11 @@ def setup_music(bot: commands.Bot):
         elif vc.channel != ctx.author.voice.channel:
             await vc.move_to(ctx.author.voice.channel)
 
-        sp_green  = discord.Color.green()
-        dz_purple = discord.Color.from_rgb(169, 99, 255)
-        yt_blue   = discord.Color.blurple()
+        sp_green   = discord.Color.green()
+        dz_purple  = discord.Color.from_rgb(169, 99, 255)
+        yt_blue    = discord.Color.blurple()
 
         async with ctx.typing():
-
-            # ── URL-based branches (unchanged) ───────────────────────────
 
             if is_spotify_playlist(query):
                 tracks = await asyncio.get_running_loop().run_in_executor(
@@ -634,43 +629,31 @@ def setup_music(bot: commands.Bot):
                 await _start_or_queue(ctx, entry, vc)
                 return
 
-            loop = asyncio.get_running_loop()
+            # Single song — search or direct YouTube URL
+            spotify_data = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: spotify_track(query)
+            )
+            audio = await fetch_audio(spotify_data["query"] if spotify_data else query)
+            if not audio:
+                await ctx.send(embed=discord.Embed(
+                    description="❌ Couldn't find that song. Try a different search! 🎵",
+                    color=discord.Color.red()
+                ))
+                return
 
-            dz_data = await loop.run_in_executor(None, lambda: deezer_search(query))
-
-            if dz_data:
-                audio = await fetch_audio(dz_data["query"])
-                if not audio:
-                    await ctx.send(embed=discord.Embed(
-                        description="❌ Found the track on Deezer but couldn't get audio. Try again! 🎵",
-                        color=discord.Color.red()
-                    ))
-                    return
-                entry = {**dz_data, "audio_url": audio["url"], "yt_url": audio["webpage"], "pending": False}
-
-            else:
-                sp_data = await loop.run_in_executor(None, lambda: spotify_track(query))
-                audio   = await fetch_audio(sp_data["query"] if sp_data else query)
-                if not audio:
-                    await ctx.send(embed=discord.Embed(
-                        description="❌ Couldn't find that song. Try a different search! 🎵",
-                        color=discord.Color.red()
-                    ))
-                    return
-                entry = {
-                    "title":     sp_data["title"]    if sp_data else audio["title"],
-                    "artist":    sp_data["artist"]   if sp_data else "Unknown",
-                    "album":     sp_data["album"]    if sp_data else None,
-                    "art":       sp_data["art"]      if sp_data else None,
-                    "spotify":   sp_data["spotify"]  if sp_data else None,
-                    "deezer":    None,
-                    "duration":  sp_data["duration"] if sp_data else audio["duration"],
-                    "query":     sp_data["query"]    if sp_data else query,
-                    "audio_url": audio["url"],
-                    "yt_url":    audio["webpage"],
-                    "pending":   False,
-                }
-
+            entry = {
+                "title":     spotify_data["title"]    if spotify_data else audio["title"],
+                "artist":    spotify_data["artist"]   if spotify_data else "Unknown",
+                "album":     spotify_data["album"]    if spotify_data else None,
+                "art":       spotify_data["art"]      if spotify_data else None,
+                "spotify":   spotify_data["spotify"]  if spotify_data else None,
+                "deezer":    None,
+                "duration":  spotify_data["duration"] if spotify_data else audio["duration"],
+                "query":     spotify_data["query"]    if spotify_data else query,
+                "audio_url": audio["url"],
+                "yt_url":    audio["webpage"],
+                "pending":   False,
+            }
             queue = get_queue(ctx.guild.id)
             queue.append(entry)
             await _start_or_queue(ctx, entry, vc)
