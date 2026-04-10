@@ -456,7 +456,7 @@ async def scheduled_announcements():
     elif now.hour == MIDNIGHT_HOUR and now.minute == 0:
         await channel.send(random.choice(MIDNIGHT_GREETINGS)); print("✅ Midnight greeting sent")
 
-    if now.hour == 10 and now.minute == 0:
+    if now.hour == 0 and now.minute == 0:
         birthdays = get_todays_birthdays()
         if birthdays:
             bday_ch = bot.get_channel(BIRTHDAY_CHANNEL)

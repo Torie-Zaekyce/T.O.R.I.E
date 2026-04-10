@@ -16,14 +16,11 @@ from discord.ext import commands
 # ---------------------------------------------------------------------------
 
 YTDL_OPTIONS = {
-    "format":        "bestaudio/best",
-    "quiet":         True,
-    "no_warnings":   True,
-    "extractor_args": {
-        "youtube": {
-            "player_client": ["web"],
-        }
-    },
+    "format":           "bestaudio/best",
+    "quiet":            True,
+    "no_warnings":      True,
+    "cookiefile":       "/home/ubuntu/T.O.R.I.E/cookies.txt",
+    "source_address":   "0.0.0.0",
     "postprocessors": [{
         "key":            "FFmpegExtractAudio",
         "preferredcodec": "opus",
