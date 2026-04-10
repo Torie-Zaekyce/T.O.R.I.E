@@ -34,7 +34,7 @@ YTDL_OPTIONS_PLAYLIST = {
     "extract_flat":       "in_playlist",
     "source_address":     "0.0.0.0",
     "nocheckcertificate": True,
-    "cookiesfrombrowser": None,
+    "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
 }
 
 FFMPEG_OPTIONS = {
