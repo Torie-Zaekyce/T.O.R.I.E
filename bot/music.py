@@ -6,6 +6,7 @@ import asyncio
 import random
 import os
 import re
+import json
 import requests
 from spotipy.oauth2 import SpotifyClientCredentials
 from discord.ext import commands
@@ -24,7 +25,7 @@ YTDL_OPTIONS = {
     "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
     "extractor_args": {
         "youtube": {
-            "player_client": ["tv_embedded", "web_creator", "web"],
+            "player_client": ["ios", "mweb"],
             "skip":          ["dash", "hls"],
         }
     },
@@ -42,7 +43,7 @@ YTDL_OPTIONS_PLAYLIST = {
     "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
     "extractor_args": {
         "youtube": {
-            "player_client": ["tv_embedded", "web_creator", "web"],
+            "player_client": ["ios", "mweb"],
         }
     },
 }
@@ -244,59 +245,38 @@ def spotify_track(url_or_query: str) -> dict | None:
         return None
 
 def spotify_playlist_tracks(url: str) -> list[dict]:
+    client = get_spotify()
+    if not client:
+        return []
     try:
-        headers = {
-            "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        resp = requests.get(url, headers=headers, timeout=10)
-        if resp.status_code != 200:
-            print(f"⚠️ Spotify playlist page returned {resp.status_code}")
-            return []
+        playlist_id = url.split("/playlist/")[1].split("?")[0]
+        results = client.playlist_tracks(playlist_id, limit=100)
+        items = results["items"]
+        while results["next"]:
+            results = client.next(results)
+            items.extend(results["items"])
 
-        match = re.search(r'<script id="initial-store" type="application/json">(.*?)</script>', resp.text, re.DOTALL)
-        if not match:
-            titles  = re.findall(r'"track_name":"([^"]+)"', resp.text)
-            artists = re.findall(r'"artist_name":"([^"]+)"', resp.text)
-            return [
-                {
-                    "title": title, "artist": artist, "album": None, "art": None,
-                    "spotify": None, "deezer": None, "duration": 0,
-                    "query": f"{title} {artist}", "audio_url": None, "yt_url": None, "pending": True,
-                }
-                for title, artist in zip(titles, artists)
-            ]
-
-        import json
-        data   = json.loads(match.group(1))
-        items  = data.get("entities", {}).get("items", {})
         tracks = []
-        for item in items.values():
-            if item.get("type") != "track":
+        for item in items:
+            t = item.get("track")
+            if not t or t.get("type") != "track":
                 continue
-            name        = item.get("name", "Unknown")
-            artist_raw  = item.get("artists", {}) or {}
-            if isinstance(artist_raw, dict):
-                artist_raw = list(artist_raw.values())
-            artist_name = artist_raw[0].get("profile", {}).get("name", "Unknown") if artist_raw else "Unknown"
-            album       = item.get("albumOfTrack", {}) or {}
-            art_items   = album.get("coverArt", {}).get("sources", [])
             tracks.append({
-                "title":     name,
-                "artist":    artist_name,
-                "album":     album.get("name"),
-                "art":       art_items[-1].get("url") if art_items else None,
-                "spotify":   f"https://open.spotify.com/track/{item.get('id', '')}",
+                "title":     t["name"],
+                "artist":    t["artists"][0]["name"],
+                "album":     t["album"]["name"],
+                "art":       t["album"]["images"][0]["url"] if t["album"]["images"] else None,
+                "spotify":   t["external_urls"]["spotify"],
                 "deezer":    None,
-                "duration":  item.get("duration", {}).get("totalMilliseconds", 0) // 1000,
-                "query":     f"{name} {artist_name}",
+                "duration":  t["duration_ms"] // 1000,
+                "query":     f"{t['name']} {t['artists'][0]['name']}",
                 "audio_url": None,
                 "yt_url":    None,
                 "pending":   True,
             })
         return tracks
     except Exception as e:
-        print(f"⚠️ Spotify playlist scrape error: {e}")
+        print(f"⚠️ Spotify playlist error: {e}")
         return []
 
 def spotify_album_tracks(url: str) -> list[dict]:
@@ -418,7 +398,7 @@ async def _start_or_queue(ctx: commands.Context, entry: dict, vc: discord.VoiceC
                 description="❌ Couldn't resolve audio for this track.", color=discord.Color.red()
             ))
             return
-        queue[queue.index(entry)] = resolved
+        queue[0] = resolved
         entry = resolved
 
     source = _make_source(entry["audio_url"])
@@ -448,7 +428,7 @@ async def _play_next(ctx: commands.Context) -> None:
     guild_id = ctx.guild.id
     vc       = ctx.voice_client
 
-    if not vc or not queue:
+    if not vc or not vc.is_connected() or not queue:
         return
 
     current = queue[0]
@@ -484,6 +464,9 @@ async def _play_next(ctx: commands.Context) -> None:
                 return
             queue[0] = resolved
             current  = resolved
+
+    if not vc.is_connected():
+        return
 
     source = _make_source(current["audio_url"])
 
