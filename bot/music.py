@@ -12,7 +12,7 @@ loop_song:  dict[int, bool] = {}
 loop_queue: dict[int, bool] = {}
 
 
-def get_queue(guild_id: int) -> list:
+def get_queue(guild_id: int) -> list[wavelink.Playable]:
     if guild_id not in queues:
         queues[guild_id] = []
     return queues[guild_id]
@@ -42,15 +42,17 @@ def now_playing_embed(track: wavelink.Playable, guild_id: int) -> discord.Embed:
     )
     if track.artwork:
         embed.set_thumbnail(url=track.artwork)
+    if hasattr(track, "album") and track.album:
+        embed.add_field(name="Album", value=str(track.album), inline=True)
     embed.add_field(name="Duration", value=format_duration(track.length), inline=True)
-    if hasattr(track, "uri") and track.uri:
+    if track.uri:
         embed.add_field(name="Link", value=f"[Open]({track.uri})", inline=True)
     if is_looping_song(guild_id):
         embed.set_footer(text="🔂 Song loop is ON")
     elif is_looping_queue(guild_id):
         embed.set_footer(text="🔁 Queue loop is ON")
     else:
-        embed.set_footer(text="T.O.R.I.E. Music — Powered by Lavalink")
+        embed.set_footer(text="T.O.R.I.E. Music — Spotify + Deezer + YouTube")
     return embed
 
 def queued_embed(track: wavelink.Playable, position: int) -> discord.Embed:
@@ -62,6 +64,8 @@ def queued_embed(track: wavelink.Playable, position: int) -> discord.Embed:
     if track.artwork:
         embed.set_thumbnail(url=track.artwork)
     embed.add_field(name="Duration", value=format_duration(track.length), inline=True)
+    if track.uri:
+        embed.add_field(name="Link", value=f"[Open]({track.uri})", inline=True)
     return embed
 
 
@@ -85,8 +89,7 @@ def setup_music(bot: commands.Bot):
             return
 
         if is_looping_song(guild_id):
-            track = queue[0]
-            await player.play(track)
+            await player.play(queue[0])
             return
 
         finished = queue.pop(0)
@@ -103,8 +106,27 @@ def setup_music(bot: commands.Bot):
 
         next_track = queue[0]
         await player.play(next_track)
-        if ctx:
+        if ctx and not is_looping_song(guild_id):
             await ctx.send(embed=now_playing_embed(next_track, guild_id))
+
+    @bot.event
+    async def on_wavelink_track_exception(payload: wavelink.TrackExceptionEventPayload):
+        print(f"⚠️ Track exception: {payload.exception}")
+        player: wavelink.Player = payload.player
+        if not player:
+            return
+        guild_id = player.guild.id
+        queue    = get_queue(guild_id)
+        ctx      = getattr(player, "_ctx", None)
+        if queue:
+            queue.pop(0)
+        if queue:
+            await player.play(queue[0])
+        elif ctx:
+            await ctx.send(embed=discord.Embed(
+                description="❌ Track failed to play, skipping.",
+                color=discord.Color.red()
+            ))
 
 
     @bot.command(name="play", aliases=["p"])
@@ -122,7 +144,7 @@ def setup_music(bot: commands.Bot):
         elif player.channel != ctx.author.voice.channel:
             await player.move_to(ctx.author.voice.channel)
 
-        player._ctx = ctx
+        player._ctx     = ctx
         player.autoplay = wavelink.AutoPlayMode.disabled
 
         async with ctx.typing():
@@ -130,7 +152,7 @@ def setup_music(bot: commands.Bot):
 
             if not tracks:
                 await ctx.send(embed=discord.Embed(
-                    description="❌ No results found. Try a different search!",
+                    description="❌ No results found. Try a different search! 🎵",
                     color=discord.Color.red()
                 ))
                 return
@@ -140,11 +162,14 @@ def setup_music(bot: commands.Bot):
             if isinstance(tracks, wavelink.Playlist):
                 for track in tracks:
                     queue.append(track)
-                await ctx.send(embed=discord.Embed(
+                embed = discord.Embed(
                     title       = "📋 Playlist Added",
                     description = f"Loaded **{len(tracks.tracks)} songs** into the queue.",
                     color       = discord.Color.blurple()
-                ).set_footer(text=tracks.name or ""))
+                )
+                if tracks.name:
+                    embed.set_footer(text=tracks.name)
+                await ctx.send(embed=embed)
             else:
                 track = tracks[0]
                 queue.append(track)
@@ -153,17 +178,19 @@ def setup_music(bot: commands.Bot):
                     return
 
             if not player.playing and not player.paused and queue:
-                first = queue[0]
-                await player.play(first)
-                player.set_volume(DEFAULT_VOLUME)
-                await ctx.send(embed=now_playing_embed(first, ctx.guild.id))
+                await player.play(queue[0])
+                await player.set_volume(DEFAULT_VOLUME)
+                await ctx.send(embed=now_playing_embed(queue[0], ctx.guild.id))
 
 
     @bot.command(name="skip", aliases=["s"])
     async def skip(ctx: commands.Context):
         player: wavelink.Player = ctx.voice_client
         if not player or not player.playing:
-            await ctx.send(embed=discord.Embed(description="⚠️ Nothing is playing.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Nothing is playing right now.",
+                color=discord.Color.orange()
+            ))
             return
         await player.stop()
         await ctx.send(embed=discord.Embed(description="⏭️ Skipped!", color=discord.Color.blurple()))
@@ -176,7 +203,10 @@ def setup_music(bot: commands.Bot):
             await player.pause(True)
             await ctx.send(embed=discord.Embed(description="⏸️ Paused.", color=discord.Color.orange()))
         else:
-            await ctx.send(embed=discord.Embed(description="⚠️ Nothing is playing.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Nothing is playing right now.",
+                color=discord.Color.orange()
+            ))
 
 
     @bot.command(name="resume")
@@ -186,7 +216,10 @@ def setup_music(bot: commands.Bot):
             await player.pause(False)
             await ctx.send(embed=discord.Embed(description="▶️ Resumed!", color=discord.Color.green()))
         else:
-            await ctx.send(embed=discord.Embed(description="⚠️ Nothing is paused.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Nothing is paused right now.",
+                color=discord.Color.orange()
+            ))
 
 
     @bot.command(name="stop")
@@ -195,22 +228,37 @@ def setup_music(bot: commands.Bot):
         if player:
             clear_state(ctx.guild.id)
             await player.disconnect()
-            await ctx.send(embed=discord.Embed(description="⏹️ Stopped and disconnected. See ya! 👋", color=discord.Color.red()))
+            await ctx.send(embed=discord.Embed(
+                description="⏹️ Stopped and disconnected. See ya! 👋",
+                color=discord.Color.red()
+            ))
         else:
-            await ctx.send(embed=discord.Embed(description="⚠️ I'm not in a voice channel.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ I'm not in a voice channel.",
+                color=discord.Color.orange()
+            ))
 
 
     @bot.command(name="volume", aliases=["vol"])
     async def volume(ctx: commands.Context, vol: int):
         player: wavelink.Player = ctx.voice_client
-        if not player:
-            await ctx.send(embed=discord.Embed(description="⚠️ Nothing is playing.", color=discord.Color.orange()))
+        if not player or not player.playing:
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Nothing is playing right now.",
+                color=discord.Color.orange()
+            ))
             return
         if not 1 <= vol <= 100:
-            await ctx.send(embed=discord.Embed(description="⚠️ Volume must be between 1 and 100.", color=discord.Color.red()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Volume must be between 1 and 100.",
+                color=discord.Color.red()
+            ))
             return
         await player.set_volume(vol)
-        await ctx.send(embed=discord.Embed(description=f"🔊 Volume set to **{vol}%**", color=discord.Color.blurple()))
+        await ctx.send(embed=discord.Embed(
+            description=f"🔊 Volume set to **{vol}%**",
+            color=discord.Color.blurple()
+        ))
 
 
     @bot.command(name="nowplaying", aliases=["np", "current", "playing"])
@@ -218,13 +266,20 @@ def setup_music(bot: commands.Bot):
         player: wavelink.Player = ctx.voice_client
         queue = get_queue(ctx.guild.id)
         if not player or (not player.playing and not player.paused) or not queue:
-            await ctx.send(embed=discord.Embed(description="⚠️ Nothing is playing.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Nothing is playing right now.",
+                color=discord.Color.orange()
+            ))
             return
         embed = now_playing_embed(queue[0], ctx.guild.id)
         if player.paused:
             embed.title = "⏸️ Currently Paused"
         if len(queue) > 1:
-            embed.add_field(name="Up Next", value=f"**{queue[1].title}** by {queue[1].author}", inline=False)
+            embed.add_field(
+                name   = "Up Next",
+                value  = f"**{queue[1].title}** by {queue[1].author}",
+                inline = False
+            )
         await ctx.send(embed=embed)
 
 
@@ -298,7 +353,10 @@ def setup_music(bot: commands.Bot):
     async def clearqueue(ctx: commands.Context):
         queue = get_queue(ctx.guild.id)
         if not queue:
-            await ctx.send(embed=discord.Embed(description="📋 The queue is already empty!", color=discord.Color.greyple()))
+            await ctx.send(embed=discord.Embed(
+                description="📋 The queue is already empty!",
+                color=discord.Color.greyple()
+            ))
             return
         player: wavelink.Player = ctx.voice_client
         current = queue[0] if (player and player.playing) else None
@@ -313,11 +371,48 @@ def setup_music(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description="🗑️ Queue cleared!", color=discord.Color.blurple()))
 
 
+    @bot.command(name="loop", aliases=["l"])
+    async def loop(ctx: commands.Context, mode: str = None):
+        guild_id = ctx.guild.id
+        if mode is None:
+            status = "🔂 Song loop" if is_looping_song(guild_id) else ("🔁 Queue loop" if is_looping_queue(guild_id) else "➡️ No loop")
+            await ctx.send(embed=discord.Embed(
+                description=f"Current loop mode: **{status}**\nUse `t!loop song`, `t!loop queue`, or `t!loop off`.",
+                color=discord.Color.blurple()
+            ))
+            return
+
+        mode = mode.lower()
+        if mode == "song":
+            loop_song[guild_id], loop_queue[guild_id] = True, False
+            await ctx.send(embed=discord.Embed(
+                description="🔂 Song loop **ON** — current song will repeat.",
+                color=discord.Color.blurple()
+            ))
+        elif mode == "queue":
+            loop_song[guild_id], loop_queue[guild_id] = False, True
+            await ctx.send(embed=discord.Embed(
+                description="🔁 Queue loop **ON** — queue will repeat when finished.",
+                color=discord.Color.blurple()
+            ))
+        elif mode == "off":
+            loop_song[guild_id], loop_queue[guild_id] = False, False
+            await ctx.send(embed=discord.Embed(description="➡️ Loop **OFF**.", color=discord.Color.greyple()))
+        else:
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Invalid mode. Use `t!loop song`, `t!loop queue`, or `t!loop off`.",
+                color=discord.Color.red()
+            ))
+
+
     @bot.command(name="shuffle", aliases=["sh"])
     async def shuffle(ctx: commands.Context):
         queue = get_queue(ctx.guild.id)
         if len(queue) < 3:
-            await ctx.send(embed=discord.Embed(description="⚠️ Need at least 3 songs to shuffle.", color=discord.Color.orange()))
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ Need at least 3 songs in the queue to shuffle.",
+                color=discord.Color.orange()
+            ))
             return
         current, rest = queue[0], queue[1:]
         random.shuffle(rest)
@@ -329,31 +424,3 @@ def setup_music(bot: commands.Bot):
             description = f"**{len(rest)}** songs rearranged.\nCurrently playing: **{current.title}**",
             color       = discord.Color.blurple()
         ))
-
-
-    @bot.command(name="loop", aliases=["l"])
-    async def loop(ctx: commands.Context, mode: str = None):
-        guild_id = ctx.guild.id
-        if mode is None:
-            status = "🔂 Song" if is_looping_song(guild_id) else ("🔁 Queue" if is_looping_queue(guild_id) else "➡️ Off")
-            await ctx.send(embed=discord.Embed(
-                description=f"Current loop mode: **{status}**\nUse `t!loop song`, `t!loop queue`, or `t!loop off`.",
-                color=discord.Color.blurple()
-            ))
-            return
-
-        mode = mode.lower()
-        if mode == "song":
-            loop_song[guild_id], loop_queue[guild_id] = True, False
-            await ctx.send(embed=discord.Embed(description="🔂 Song loop **ON**", color=discord.Color.blurple()))
-        elif mode == "queue":
-            loop_song[guild_id], loop_queue[guild_id] = False, True
-            await ctx.send(embed=discord.Embed(description="🔁 Queue loop **ON**", color=discord.Color.blurple()))
-        elif mode == "off":
-            loop_song[guild_id], loop_queue[guild_id] = False, False
-            await ctx.send(embed=discord.Embed(description="➡️ Loop **OFF**", color=discord.Color.greyple()))
-        else:
-            await ctx.send(embed=discord.Embed(
-                description="⚠️ Invalid mode. Use `t!loop song`, `t!loop queue`, or `t!loop off`.",
-                color=discord.Color.red()
-            ))
