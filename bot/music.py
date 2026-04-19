@@ -16,17 +16,24 @@ from discord.ext import commands
 # ---------------------------------------------------------------------------
 
 YTDL_OPTIONS = {
-    "format":           "bestaudio/bestaudio*[ext=webm]/bestaudio*[ext=m4a]/best",
-    "quiet":            True,
-    "no_warnings":      True,
-    "cookiefile":       "/home/ubuntu/T.O.R.I.E/cookies.txt",
-    "source_address":   "0.0.0.0",
-    "postprocessors": [{
-        "key":            "FFmpegExtractAudio",
-        "preferredcodec": "opus",
-    }],
+        "format":             "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
+    "quiet":              True,
+    "no_warnings":        True,
+    "source_address":     "0.0.0.0",
+    "nocheckcertificate": True,
+    "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
+ 
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv_embedded", "web_creator", "web"],
+            "skip":          ["dash", "hls"],
+        }
+    },
+ 
+    "retries":          5,
+    "fragment_retries": 5,
 }
-
+ 
 YTDL_OPTIONS_PLAYLIST = {
     "format":             "bestaudio/best",
     "quiet":              True,
@@ -35,8 +42,13 @@ YTDL_OPTIONS_PLAYLIST = {
     "source_address":     "0.0.0.0",
     "nocheckcertificate": True,
     "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["tv_embedded", "web_creator", "web"],
+        }
+    },
 }
-
+ 
 FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options":        "-vn",
