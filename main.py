@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import pytz
 import random
 import asyncio
+import wavelink
 import re
 import os
 
@@ -498,6 +499,12 @@ async def on_ready():
         print(f"⚠️ Slash command sync failed: {e}")
     scheduled_announcements.start()
 
+async def setup_hook(self):
+    node = wavelink.Node(
+        uri      = "http://127.0.0.1:2333",
+        password = "Iwannadiexd"
+    )
+    await wavelink.Pool.connect(nodes=[node], client=self)
 
 @bot.event
 async def on_message(message: discord.Message):
