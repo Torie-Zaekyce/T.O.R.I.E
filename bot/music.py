@@ -16,7 +16,7 @@ from discord.ext import commands
 # ---------------------------------------------------------------------------
 
 YTDL_OPTIONS = {
-    "format":           "bestaudio/best",
+    "format":           "bestaudio/bestaudio*[ext=webm]/bestaudio*[ext=m4a]/best",
     "quiet":            True,
     "no_warnings":      True,
     "cookiefile":       "/home/ubuntu/T.O.R.I.E/cookies.txt",
