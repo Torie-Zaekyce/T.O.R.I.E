@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 import pytz
 import random
 import asyncio
-import wavelink
 import re
 import os
 
@@ -497,17 +496,6 @@ async def on_ready():
         print(f"   Slash commands : {len(synced)} synced")
     except Exception as e:
         print(f"⚠️ Slash command sync failed: {e}")
-
-    try:
-        node = wavelink.Node(
-            uri      = "http://127.0.0.1:2333",
-            password = "Iwannadiexd"
-        )
-        await wavelink.Pool.connect(nodes=[node], client=bot)
-        print("✅ Lavalink node connected!")
-    except Exception as e:
-        print(f"⚠️ Lavalink connection failed: {e}")
-
     scheduled_announcements.start()
 
 @bot.event
