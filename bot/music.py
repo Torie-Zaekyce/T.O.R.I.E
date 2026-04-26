@@ -8,7 +8,6 @@ import json
 from spotipy.oauth2 import SpotifyClientCredentials
 from discord.ext import commands
 
-
 YTDL_OPTIONS = {
     "format":             "bestaudio/best",
     "quiet":              True,
@@ -21,9 +20,10 @@ YTDL_OPTIONS = {
             "player_client": ["web", "android"],
         }
     },
-    "retries":            10,
-    "fragment_retries":   10,
-    "format_sort":        ["abr", "asr", "proto:https"],
+    "js_runtimes":     "node",
+    "retries":         10,
+    "fragment_retries":10,
+    "format_sort":     ["abr", "asr", "proto:https"],
 }
 
 YTDL_OPTIONS_PLAYLIST = {
@@ -39,6 +39,7 @@ YTDL_OPTIONS_PLAYLIST = {
             "player_client": ["web", "android"],
         }
     },
+    "js_runtimes":     "node",
 }
 
 FFMPEG_OPTIONS = {
