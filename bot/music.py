@@ -18,7 +18,7 @@ YTDL_OPTIONS = {
     "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
     "extractor_args": {
         "youtube": {
-            "player_client": ["ios", "mweb"],
+            "player_client": ["web", "android"],
         }
     },
     "retries":            10,
@@ -36,7 +36,7 @@ YTDL_OPTIONS_PLAYLIST = {
     "cookiefile":         "/home/ubuntu/T.O.R.I.E/cookies.txt",
     "extractor_args": {
         "youtube": {
-            "player_client": ["ios", "mweb"],
+            "player_client": ["web", "android"],
         }
     },
 }
