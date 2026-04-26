@@ -4,7 +4,6 @@ import spotipy
 import asyncio
 import random
 import os
-import json
 from spotipy.oauth2 import SpotifyClientCredentials
 from discord.ext import commands
 
