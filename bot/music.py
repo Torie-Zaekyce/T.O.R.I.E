@@ -20,7 +20,7 @@ YTDL_OPTIONS = {
             "player_client": ["web", "android"],
         }
     },
-    "js_runtimes":     "node",
+    "js_runtimes":     {"node": {}},
     "retries":         10,
     "fragment_retries":10,
     "format_sort":     ["abr", "asr", "proto:https"],
@@ -39,7 +39,7 @@ YTDL_OPTIONS_PLAYLIST = {
             "player_client": ["web", "android"],
         }
     },
-    "js_runtimes":     "node",
+    "js_runtimes":     {"node": {}},
 }
 
 FFMPEG_OPTIONS = {
