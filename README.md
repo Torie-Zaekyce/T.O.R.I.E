@@ -189,17 +189,7 @@ Family members have default permissions without needing a grant — parents have
 
 ## Hosting
 
-### Chat-only (Railway)
-Railway works for everything except music. Push to GitHub and Railway auto-deploys.
-
-```
-# Procfile
-worker: python main.py
-```
-
-Set all environment variables in the Railway dashboard under **Variables**.
-
-### Music (Oracle VPS or any self-hosted server)
+### (deprecated) Music (Oracle VPS or any self-hosted server)
 Railway bans music bots. For music, deploy to a free Oracle Cloud VM (ARM A1 Flex, always free):
 
 ```bash
