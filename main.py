@@ -8,7 +8,6 @@ from bot.commands import (
     has_permission, add_warn,
     _INTERACTION_ACTIONS, _search_klipy_gif
 )
-from bot.music import setup_music
 from bot.greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
 from datetime import datetime, timedelta as _td
 from dotenv import load_dotenv
@@ -430,8 +429,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
 # ---------------------------------------------------------------------------
 
 setup_commands(bot)
-setup_music(bot)
-
 # ---------------------------------------------------------------------------
 # Scheduled announcements
 # ---------------------------------------------------------------------------

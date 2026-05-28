@@ -459,11 +459,6 @@ def setup_commands(bot: commands.Bot):
             "`t!personality list` — See active traits\n"
             "`t!personality clear` — Clear all traits *(perm: personality)*"
         ))
-        embed.add_field(name="🎵 Music", inline=False, value=(
-            "`t!play <song>` `t!skip` `t!pause` `t!resume`\n"
-            "`t!queue` `t!clearqueue` `t!shuffle` `t!loop song/queue/off`\n"
-            "`t!nowplaying` `t!volume <1-100>` `t!stop`"
-        ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
 

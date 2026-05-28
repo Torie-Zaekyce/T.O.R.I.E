@@ -1,12 +1,8 @@
 discord.py[voice]
 groq
 pytz
-spotipy
-yt-dlp
-PyNaCl
-python-dotenv
-deezer-python
-requests
 pymongo[srv]>=4.7.0
 certifi
 aiohttp
+python-dotenv
+ 
