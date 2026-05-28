@@ -12,9 +12,6 @@ T.O.R.I.E. is a feature-rich Discord bot designed for a private server. She chat
 ### 🤖 AI Chat
 T.O.R.I.E. responds when mentioned. She has a distinct personality — sarcastic, warm, occasionally wise — powered by Groq's LLaMA models. She reacts to images, stickers, and knows how to switch to a softer tone when someone needs it. She also gives genuine advice when asked.
 
-### 🎵 Music
-Full music playback from Spotify, Deezer, and YouTube via yt-dlp. Supports queues, shuffle, looping, volume control, and skip/pause/resume. Music requires a self-hosted VPS (Railway bans music bots).
-
 ### 🎂 Birthdays
 Users register their own birthdays. T.O.R.I.E. announces them at midnight PHT in a dedicated birthday channel with a role ping.
 
@@ -187,20 +184,6 @@ Family members have default permissions without needing a grant — parents have
 | `t!personality remove <number>` | Remove a trait | `personality` |
 | `t!personality list` | View active traits | anyone |
 | `t!personality clear` | Clear all traits | `personality` |
-
-### 🎵 Music
-| Command | Description |
-|---|---|
-| `t!play <song/URL>` | Play from YouTube, Spotify, or Deezer |
-| `t!skip` | Skip current song |
-| `t!pause` / `t!resume` | Pause or resume |
-| `t!queue` | Show the queue |
-| `t!clearqueue` | Clear the queue |
-| `t!shuffle` | Shuffle the queue |
-| `t!loop song/queue/off` | Set loop mode |
-| `t!nowplaying` | Show current track |
-| `t!volume <1-100>` | Set volume |
-| `t!stop` | Stop and disconnect |
 
 ---
 
