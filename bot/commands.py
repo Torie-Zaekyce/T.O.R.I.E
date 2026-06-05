@@ -10,6 +10,11 @@ from datetime import datetime
 from discord.ext import commands
 import pymongo
 
+from bot.user_memory import (
+    get_user_memory, all_memories, add_single_fact,
+    remove_fact_by_index, clear_facts, delete_user as delete_user_memory,
+)
+
 # ---- Family dicts ----
 
 PARENTS = {
@@ -59,6 +64,7 @@ FILTERED_WORDS = ["retard", "nigger", "nigga", "negro", "negra"]
 
 # ---- MongoDB Store (shared client) ----
 
+_MONGO_UNAVAILABLE = object()
 _mongo_client = None
 _birthday_col = None
 _filter_col   = None
@@ -67,10 +73,13 @@ _perm_col     = None
 
 def _get_client():
     global _mongo_client
+    if _mongo_client is _MONGO_UNAVAILABLE:
+        return None
     if _mongo_client is None:
         uri = os.getenv("MONGODB_URI")
         if not uri:
             print("⚠️ MONGODB_URI not set — data won't persist!")
+            _mongo_client = _MONGO_UNAVAILABLE
             return None
         try:
             import certifi
@@ -82,6 +91,8 @@ def _get_client():
             print("✅ MongoDB connected!")
         except Exception as e:
             print(f"⚠️ MongoDB connection failed: {e}")
+            _mongo_client = _MONGO_UNAVAILABLE
+            return None
     return _mongo_client
 
 def get_birthday_col():
@@ -207,7 +218,6 @@ def clear_warns(user_id: str):
 
 VALID_PERMS = {"mute", "unmute", "filter", "personality", "purge", "sendmsg", "warn", "mod"}
 
-# Family role → default permissions (without needing t!perm grant)
 _FAMILY_DEFAULT_PERMS: dict[str, set] = {
     "dad":           {"mod"},
     "mom":           {"mod"},
@@ -234,10 +244,8 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
     "fuck":  ("*holds {target}'s hand! 🥺👉👈*",              "anime holding hands"),
 }
 
-# Max file size for /sendmsg (8 MB — safe without Nitro boost)
 _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 
-# Regex to parse Discord message links
 _MSG_LINK_RE = re.compile(
     r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
     r"(\d+)/(\d+)/(\d+)"
@@ -245,8 +253,6 @@ _MSG_LINK_RE = re.compile(
 
 
 # ---- Klipy GIF search ----
-# GET https://api.klipy.com/api/v1/{API_KEY}/gifs/search
-# Params: q (query string), limit (int)
 
 async def _search_klipy_gif(query: str) -> str | None:
     KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
@@ -312,7 +318,6 @@ def revoke_perm(user_id: int, perm: str) -> bool:
         print(f"⚠️ Failed to revoke perm: {e}"); return False
 
 def has_permission(user, perm: str) -> bool:
-    """Check family role defaults first (no DB call), then fall back to DB grants."""
     role = get_role(user)
     if role:
         defaults = _FAMILY_DEFAULT_PERMS.get(role, set())
@@ -350,9 +355,6 @@ def normalize(text: str) -> str:
     text = re.sub(r'(.)\1{2,}', r'\1\1', text)
     return re.sub(r'[^a-z0-9]', '', text)
 
-
-# Precomputed filter cache — rebuilt whenever FILTERED_WORDS mutates.
-# Call _rebuild_filter_cache() after any add/remove to FILTERED_WORDS.
 _NORM_SLURS:   dict[str, str] = {}
 _MAX_SLUR_LEN: int            = 0
 
@@ -365,31 +367,17 @@ _rebuild_filter_cache()
 
 
 def contains_filtered_word(content: str) -> str | None:
-    """
-    Two-pass filter.
-
-    Pass 1 — per-token exact normalized match (word-boundary safe).
-             Catches: nigger, n1gger, r3t4rd, retard.
-             Skips:   snigger, retarding, enegra, sniggers.
-
-    Pass 2 — full-string evasion check, only when no token is long enough
-             to span a complete slur (punctuation/space evasion like
-             n!gger, n.i.g.g.e.r, "n i g g e r").
-    """
     tokens = re.findall(r'\b\w+\b', content.lower())
-
     for token in tokens:
         if token in FILTER_WHITELIST:
             continue
         if normalize(token) in _NORM_SLURS:
             return _NORM_SLURS[normalize(token)]
-
-    max_token_len = max((len(t) for t in tokens), default=0)
-    if max_token_len < _MAX_SLUR_LEN:
-        norm_full = normalize(content)
-        for slur_norm, slur_orig in _NORM_SLURS.items():
-            if slur_norm in norm_full:
-                return slur_orig
+        
+    norm_full = normalize(content)
+    for slur_norm, slur_orig in _NORM_SLURS.items():
+        if slur_norm in norm_full:
+            return slur_orig
 
     return None
 
@@ -405,7 +393,7 @@ def get_todays_birthdays() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# setup_commands — ALL bot command registrations live inside this function
+# setup_commands
 # ---------------------------------------------------------------------------
 
 def setup_commands(bot: commands.Bot):
@@ -433,7 +421,7 @@ def setup_commands(bot: commands.Bot):
             "`@T.O.R.I.E. warn @user [reason]` — Warn + auto-mute 10min *(perm: warn)*\n"
             "`t!warns @user` — Check warn history\n"
             "`t!warns @user clear` — Clear warns *(perm: warn)*\n"
-            "`/sendmsg #channel <message> [attachment] [reply_to]` — Send a message with optional file/reply *(perm: sendmsg)*"
+            "`/sendmsg #channel <message> [attachment] [reply_to]` — Send a message *(perm: sendmsg)*"
         ))
         embed.add_field(name="🔑 Permissions", inline=False, value=(
             "`t!perm add @user <perm>` — Grant a permission *(parents only)*\n"
@@ -458,6 +446,13 @@ def setup_commands(bot: commands.Bot):
             "`t!personality remove <number>` — Remove a trait *(perm: personality)*\n"
             "`t!personality list` — See active traits\n"
             "`t!personality clear` — Clear all traits *(perm: personality)*"
+        ))
+        embed.add_field(name="🧠 Memory", inline=False, value=(
+            "`t!memory view [@user]` — See what T.O.R.I.E. remembers about you\n"
+            "`t!memory add @user <fact>` — Manually add a memory *(parents only)*\n"
+            "`t!memory remove @user <number>` — Remove a memory *(parents only)*\n"
+            "`t!memory clear @user` — Wipe all memories *(parents only)*\n"
+            "`t!memory list` — See all remembered users *(parents only)*"
         ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
@@ -715,7 +710,6 @@ def setup_commands(bot: commands.Bot):
                 color=discord.Color.orange()
             ))
             return
-
         if action and action.lower() == "clear":
             if not has_permission(ctx.author, "warn"):
                 await ctx.send(embed=discord.Embed(description="⛔ You don't have permission to clear warnings.", color=discord.Color.red()))
@@ -723,7 +717,6 @@ def setup_commands(bot: commands.Bot):
             clear_warns(str(member.id))
             await ctx.send(embed=discord.Embed(description=f"✅ Cleared all warnings for {member.mention}.", color=discord.Color.green()))
             return
-
         warns = load_warns(str(member.id))
         if not warns:
             await ctx.send(embed=discord.Embed(description=f"✅ {member.mention} has no warnings. Clean record! 🌟", color=discord.Color.green()))
@@ -905,20 +898,15 @@ def setup_commands(bot: commands.Bot):
         if not has_permission(interaction.user, "sendmsg"):
             await interaction.response.send_message("⛔ You don't have permission to use this command.", ephemeral=True)
             return
-
         if not message and not attachment:
             await interaction.response.send_message("⚠️ You must provide a message, an attachment, or both.", ephemeral=True)
             return
-
         if message and len(message) > 2000:
             await interaction.response.send_message("⚠️ Message is too long (max 2000 characters).", ephemeral=True)
             return
-
         if message:
             message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
-        # All validation paths below respond and return before we defer,
-        # keeping the interaction state consistent when we reach the send step.
         reference: discord.MessageReference | None = None
         if reply_to:
             match = _MSG_LINK_RE.search(reply_to)
@@ -928,67 +916,44 @@ def setup_commands(bot: commands.Bot):
                     ephemeral=True
                 )
                 return
-
             link_guild_id   = int(match.group(1))
             link_channel_id = int(match.group(2))
             link_message_id = int(match.group(3))
-
             if link_guild_id != interaction.guild_id:
-                await interaction.response.send_message(
-                    "⚠️ That message link is from a different server.", ephemeral=True
-                )
+                await interaction.response.send_message("⚠️ That message link is from a different server.", ephemeral=True)
                 return
-
             if link_channel_id != channel.id:
                 await interaction.response.send_message(
-                    f"⚠️ That message is in a different channel. The reply must be in {channel.mention}.",
-                    ephemeral=True
+                    f"⚠️ That message is in a different channel. The reply must be in {channel.mention}.", ephemeral=True
                 )
                 return
-
             try:
                 target_msg = await channel.fetch_message(link_message_id)
                 reference  = target_msg.to_reference(fail_if_not_exists=False)
             except discord.NotFound:
-                await interaction.response.send_message(
-                    "⚠️ Couldn't find that message. It may have been deleted.", ephemeral=True
-                )
+                await interaction.response.send_message("⚠️ Couldn't find that message. It may have been deleted.", ephemeral=True)
                 return
             except discord.Forbidden:
-                await interaction.response.send_message(
-                    "⛔ I don't have permission to read messages in that channel.", ephemeral=True
-                )
+                await interaction.response.send_message("⛔ I don't have permission to read messages in that channel.", ephemeral=True)
                 return
             except Exception as e:
-                # Catches unexpected HTTP errors or network failures from fetch_message.
-                # Without this, the exception would propagate and leave the interaction
-                # without any response, showing "The application did not respond" to the user.
                 print(f"❌ /sendmsg fetch_message error: {type(e).__name__}: {e}")
-                await interaction.response.send_message(
-                    "❌ Failed to fetch the reply target. Please try again.", ephemeral=True
-                )
+                await interaction.response.send_message("❌ Failed to fetch the reply target. Please try again.", ephemeral=True)
                 return
 
-        # Defer once, right before any slow I/O (download or channel.send).
         discord_file: discord.File | None = None
-
         if attachment:
             if attachment.size > _MAX_ATTACHMENT_BYTES:
                 await interaction.response.send_message(
-                    f"⚠️ Attachment too large ({attachment.size / 1024 / 1024:.1f} MB). Max is 8 MB.",
-                    ephemeral=True
+                    f"⚠️ Attachment too large ({attachment.size / 1024 / 1024:.1f} MB). Max is 8 MB.", ephemeral=True
                 )
                 return
-
             await interaction.response.defer(ephemeral=True)
-
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(attachment.url) as resp:
                         if resp.status != 200:
-                            await interaction.followup.send(
-                                f"❌ Failed to download attachment (HTTP {resp.status}).", ephemeral=True
-                            )
+                            await interaction.followup.send(f"❌ Failed to download attachment (HTTP {resp.status}).", ephemeral=True)
                             return
                         discord_file = discord.File(
                             fp       = io.BytesIO(await resp.read()),
@@ -1002,8 +967,6 @@ def setup_commands(bot: commands.Bot):
         else:
             await interaction.response.defer(ephemeral=True)
 
-        # Build send kwargs explicitly rather than passing discord.utils.MISSING as keyword
-        # arguments, which can behave inconsistently across discord.py patch versions.
         send_kwargs: dict = {}
         if message:      send_kwargs["content"]   = message
         if discord_file: send_kwargs["file"]      = discord_file
@@ -1011,14 +974,12 @@ def setup_commands(bot: commands.Bot):
 
         try:
             await channel.send(**send_kwargs)
-
             parts = []
             if message:      parts.append("message")
             if discord_file: parts.append(f"attachment (`{attachment.filename}`)")
             reply_note = " as a reply" if reference else ""
             await interaction.followup.send(
-                f"✅ Sent {' and '.join(parts)}{reply_note} in {channel.mention}.",
-                ephemeral=True
+                f"✅ Sent {' and '.join(parts)}{reply_note} in {channel.mention}.", ephemeral=True
             )
             print(
                 f"📨 /sendmsg by {interaction.user} → #{channel.name}"
@@ -1046,7 +1007,6 @@ def setup_commands(bot: commands.Bot):
         text_template, query = _INTERACTION_ACTIONS[action]
         gif_url = await _search_klipy_gif(query)
         text    = text_template.format(target=target.mention)
-
         embed = discord.Embed(description=text, color=discord.Color.pink())
         if gif_url:
             embed.set_image(url=gif_url)
@@ -1087,5 +1047,154 @@ def setup_commands(bot: commands.Bot):
 
     @bot.command(name="tor")
     async def cmd_tor(ctx, action: str, target: discord.Member):
-        """Catch-all shortcut: t!tor punch @user"""
         await _run_interaction(ctx, target, action.lower())
+
+    # ---- Memory ----
+
+    @bot.group(name="memory", aliases=["mem"], invoke_without_command=True)
+    async def memory_group(ctx):
+        await ctx.send(embed=discord.Embed(
+            title       = "🧠 Memory Commands",
+            description = (
+                "`t!memory view [@user]` — view memories for yourself or a user\n"
+                "`t!memory add @user <fact>` — manually add a fact *(parents only)*\n"
+                "`t!memory remove @user <number>` — remove a fact by number *(parents only)*\n"
+                "`t!memory clear @user` — wipe all facts for a user *(parents only)*\n"
+                "`t!memory delete @user` — fully remove a user from memory *(parents only)*\n"
+                "`t!memory list` — show all users T.O.R.I.E. remembers *(parents only)*"
+            ),
+            color = discord.Color.blurple()
+        ))
+
+    @memory_group.command(name="view")
+    async def memory_view(ctx, member: discord.Member = None):
+        target = member or ctx.author
+        if member and member != ctx.author and not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can view other people's memories.", color=discord.Color.red()
+            ))
+            return
+        doc = get_user_memory(str(target.id))
+        if not doc or not doc.get("facts"):
+            await ctx.send(embed=discord.Embed(
+                description=f"🧠 No memories stored for **{target.display_name}** yet.",
+                color=discord.Color.greyple()
+            ))
+            return
+        facts_text = "\n".join(f"`{i+1}.` {f}" for i, f in enumerate(doc["facts"]))
+        embed = discord.Embed(
+            title       = f"🧠 Memory — {target.display_name}",
+            description = facts_text,
+            color       = discord.Color.blurple()
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        from datetime import timezone
+        last_seen = doc.get("last_seen")
+        if last_seen:
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+            embed.add_field(name="Last seen",    value=f"<t:{int(last_seen.timestamp())}:R>", inline=True)
+        embed.add_field(name="Interactions", value=str(doc.get("interaction_count", 0)), inline=True)
+        embed.set_footer(text=f"{len(doc['facts'])} fact(s) stored")
+        await ctx.send(embed=embed)
+
+    @memory_group.command(name="add")
+    async def memory_add(ctx, member: discord.Member, *, fact: str):
+        if not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can manually add memories.", color=discord.Color.red()
+            ))
+            return
+        added = add_single_fact(str(member.id), member.display_name, fact.strip())
+        if added:
+            await ctx.send(embed=discord.Embed(
+                description=f"✅ Added to **{member.display_name}**'s memory:\n> {fact.strip()}",
+                color=discord.Color.green()
+            ))
+        else:
+            await ctx.send(embed=discord.Embed(
+                description=f"⚠️ That fact is already in **{member.display_name}**'s memory.",
+                color=discord.Color.orange()
+            ))
+
+    @memory_group.command(name="remove")
+    async def memory_remove(ctx, member: discord.Member, index: int):
+        if not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can remove memories.", color=discord.Color.red()
+            ))
+            return
+        removed = remove_fact_by_index(str(member.id), index)
+        if removed:
+            await ctx.send(embed=discord.Embed(
+                description=f"✅ Removed fact #{index} from **{member.display_name}**:\n> {removed}",
+                color=discord.Color.green()
+            ))
+        else:
+            await ctx.send(embed=discord.Embed(
+                description=f"⚠️ No fact #{index} found for **{member.display_name}**. Use `t!memory view` to check.",
+                color=discord.Color.orange()
+            ))
+
+    @memory_group.command(name="clear")
+    async def memory_clear(ctx, member: discord.Member):
+        if not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can clear memories.", color=discord.Color.red()
+            ))
+            return
+        cleared = clear_facts(str(member.id))
+        if cleared:
+            await ctx.send(embed=discord.Embed(
+                description=f"✅ Cleared all memories for **{member.display_name}**.",
+                color=discord.Color.green()
+            ))
+        else:
+            await ctx.send(embed=discord.Embed(
+                description=f"⚠️ No memory document found for **{member.display_name}**.",
+                color=discord.Color.orange()
+            ))
+
+    @memory_group.command(name="delete")
+    async def memory_delete(ctx, member: discord.Member):
+        if not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can delete memory records.", color=discord.Color.red()
+            ))
+            return
+        deleted = delete_user_memory(str(member.id))
+        if deleted:
+            await ctx.send(embed=discord.Embed(
+                description=f"🗑️ Fully removed **{member.display_name}** from T.O.R.I.E.'s memory.",
+                color=discord.Color.blurple()
+            ))
+        else:
+            await ctx.send(embed=discord.Embed(
+                description=f"⚠️ No memory document found for **{member.display_name}**.",
+                color=discord.Color.orange()
+            ))
+
+    @memory_group.command(name="list")
+    async def memory_list(ctx):
+        if not get_parent_role(ctx.author):
+            await ctx.send(embed=discord.Embed(
+                description="⛔ Only my parents can list all memories.", color=discord.Color.red()
+            ))
+            return
+        docs = all_memories()
+        if not docs:
+            await ctx.send(embed=discord.Embed(
+                description="🧠 No user memories stored yet.", color=discord.Color.greyple()
+            ))
+            return
+        lines = [
+            f"<@{d['_id']}> **{d.get('display_name', 'Unknown')}** — {d.get('interaction_count', 0)} interaction(s)"
+            for d in sorted(docs, key=lambda x: x.get("interaction_count", 0), reverse=True)
+        ]
+        embed = discord.Embed(
+            title       = f"🧠 All Remembered Users ({len(docs)})",
+            description = "\n".join(lines),
+            color       = discord.Color.blurple()
+        )
+        embed.set_footer(text="Use t!memory view @user to see their facts")
+        await ctx.send(embed=embed)
