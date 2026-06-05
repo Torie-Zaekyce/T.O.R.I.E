@@ -10,6 +10,8 @@ from datetime import datetime
 from discord.ext import commands
 import pymongo
 
+# ---- User Memory ----
+
 from bot.user_memory import (
     get_user_memory, all_memories, add_single_fact,
     remove_fact_by_index, clear_facts, delete_user as delete_user_memory,

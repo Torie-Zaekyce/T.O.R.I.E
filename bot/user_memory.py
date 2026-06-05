@@ -194,7 +194,7 @@ def delete_user(user_id: str) -> bool:
 def build_memory_note(user_id: str) -> str | None:
     """
     Returns a compact string to inject into the AI prompt, or None if no facts.
-    Example: "Known facts about this user: Likes lo-fi music. Lives in the Philippines."
+    Example: "Known facts about this user: Likes to Interact in Discord. Likes to playing games"
     """
     doc = get_user_memory(user_id)
     if not doc or not doc.get("facts"):

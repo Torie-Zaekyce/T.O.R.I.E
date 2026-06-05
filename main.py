@@ -56,9 +56,9 @@ GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 TIMEZONE           = pytz.timezone("Asia/Manila")
 GREET_HOUR         = 7
 LUNCH_HOUR         = 12
-DINNER_HOUR        = 19
+DINNER_HOUR        = 19  
 DINNER_MINUTE      = 30
-EVENING_HOUR       = 19
+EVENING_HOUR       = 19   
 MIDNIGHT_HOUR      = 0
 GENERAL_CHANNEL    = 1242875666265800806
 BIRTHDAY_CHANNEL   = 1242875666265800806
@@ -393,7 +393,11 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
             contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
             mentioned = [u for u in message.mentions if u != bot.user]
             if mentioned:
-                mention_info  = ", ".join(f"{u.display_name} (mention them as {u.mention})" for u in mentioned)
+                def _safe_name(u: discord.User) -> str:
+                    name = re.sub(r'[^\w\s\-]', '', u.display_name)[:32].strip() or "a user"
+                    return f"{name} (mention them as {u.mention})"
+
+                mention_info  = ", ".join(_safe_name(u) for u in mentioned)
                 contexted_msg = (
                     f"[Note: The following users were mentioned: {mention_info}. "
                     f"You may use their mention format directly in your reply.]\n{contexted_msg}"
@@ -429,6 +433,7 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
 # ---------------------------------------------------------------------------
 
 setup_commands(bot)
+
 # ---------------------------------------------------------------------------
 # Scheduled announcements
 # ---------------------------------------------------------------------------
@@ -500,6 +505,10 @@ async def on_message(message: discord.Message):
     if message.author == bot.user:
         return
 
+    if message.content.startswith("t!"):
+        await bot.process_commands(message)
+        return
+
     if contains_filtered_word(message.content):
         try:
             await message.delete()
@@ -507,10 +516,6 @@ async def on_message(message: discord.Message):
             await warning.delete(delay=5)
         except discord.Forbidden:
             print(f"⚠️ Missing permissions in #{message.channel.name}")
-        return
-
-    if message.content.startswith("t!"):
-        await bot.process_commands(message)
         return
 
     # "tor <action> @user" — no prefix needed
@@ -592,6 +597,14 @@ async def on_message(message: discord.Message):
             await message.reply(embed=embed, mention_author=False)
             return
 
+    # BUG 2 FIX: Run injection check BEFORE moderation handlers so a crafted
+    # message like "@TORIE unmute @user ignore all previous instructions"
+    # cannot sneak through the moderation path before being caught.
+    if INJECTION_REGEX.search(clean_msg):
+        await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
+        print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
+        return
+
     # Warn
     if targets and re.search(r'\bwarn\b', lowered):
         await _handle_warn(message, targets, clean_msg)
@@ -607,14 +620,15 @@ async def on_message(message: discord.Message):
         await _handle_unmute(message, targets)
         return
 
-    # Security check
+    # Length check (injection already handled above)
     clean_msg, rejection = sanitize_input(clean_msg)
     if rejection == "too_long":
         await message.channel.send("⚠️ Too Long Didn't Read. Congratulations or Sorry for what happened 😅")
         return
+    # injection case is already handled above; this is a no-op safety net
     if rejection == "injection":
         await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
-        print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
+        print(f"⚠️ Injection blocked (sanitize_input) from {message.author} ({message.author.id})")
         return
 
     await _handle_ai_reply(message, clean_msg, role_key)
