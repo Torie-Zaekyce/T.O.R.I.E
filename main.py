@@ -9,6 +9,7 @@ from bot.commands import (
     _INTERACTION_ACTIONS, _search_klipy_gif
 )
 from bot.greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
+from bot.user_memory import touch_user, build_memory_note, extract_and_save_facts
 from datetime import datetime, timedelta as _td
 from dotenv import load_dotenv
 import pytz
@@ -387,10 +388,20 @@ async def _handle_unmute(message: discord.Message, targets: list) -> None:
 
 
 async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: str | None) -> None:
+
+    user_id      = str(message.author.id)
+    display_name = message.author.display_name
+    touch_user(user_id, display_name)
+
     async with message.channel.typing():
         try:
             note = _CONTEXT_NOTES.get(role_key)
             contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
+
+            memory_note = build_memory_note(user_id)
+            if memory_note:
+                contexted_msg = f"[{memory_note}]\n{contexted_msg}"
+
             mentioned = [u for u in message.mentions if u != bot.user]
             if mentioned:
                 def _safe_name(u: discord.User) -> str:
@@ -426,7 +437,15 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
         except Exception as e:
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
+
     await message.reply(reply, mention_author=False)
+
+    asyncio.create_task(
+        asyncio.to_thread(
+            extract_and_save_facts,
+            user_id, display_name, clean_msg, groq_client, GROQ_FALLBACK
+        )
+    )
 
 # ---------------------------------------------------------------------------
 # Setup

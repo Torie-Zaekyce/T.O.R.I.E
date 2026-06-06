@@ -1,6 +1,8 @@
 import os
 import pymongo
 from datetime import datetime, timezone
+import re
+import json
  
 MAX_FACTS = 20
  
@@ -201,3 +203,45 @@ def build_memory_note(user_id: str) -> str | None:
         return None
     facts_text = " ".join(f"{f}." for f in doc["facts"])
     return f"Known facts about this user: {facts_text}"
+
+
+# ---------------------------------------------------------------------------
+# Fact extraction (called after each AI reply)
+# ---------------------------------------------------------------------------
+
+def extract_and_save_facts(user_id: str, display_name: str, user_message: str, groq_client, model: str) -> None:
+    """
+    Uses a lightweight LLM call to pull durable facts from a single user message
+    and saves any new ones to MongoDB. Silently no-ops on errors or short messages.
+    """
+    if not user_message or len(user_message.strip()) < 8:
+        return
+    try:
+        prompt = (
+            "Extract short, durable facts about the user from their message. "
+            "Only extract things that are genuinely personal and worth remembering long-term "
+            "(e.g. hobbies, job, personality traits, preferences, relationships, feelings they've expressed). "
+            "Do NOT extract greetings, questions directed at the bot, or one-off throwaway comments. "
+            "Return ONLY a JSON array of strings, max 3 items. "
+            "If nothing worth remembering exists, return an empty array []. "
+            "Example output: [\"Likes playing Genshin Impact\", \"Studies computer science\"]"
+        )
+        response = groq_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user",   "content": user_message},
+            ],
+            max_tokens=120,
+            temperature=0.2,
+        )
+        raw = response.choices[0].message.content.strip()
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        facts = json.loads(raw)
+        if isinstance(facts, list) and facts:
+            clean = [str(f).strip() for f in facts if isinstance(f, str) and f.strip()]
+            if clean:
+                add_facts(user_id, display_name, clean)
+                print(f"🧠 [user_memory] Saved {len(clean)} fact(s) for {display_name}: {clean}")
+    except Exception as e:
+        print(f"⚠️ [user_memory] extract_and_save_facts error: {e}")
