@@ -31,7 +31,6 @@ MAX_REPLY_LENGTH   = 1800
 
 INJECTION_PATTERNS = [
     r"ignore (all |previous |your )?(instructions|rules|prompt)",
-    r"(you are|you're|act as|pretend (you are|to be)|roleplay as|simulate being)",
     r"new (instructions|prompt|system|rules|persona|personality)",
     r"disregard (your |all )?(previous |prior )?(instructions|rules|training)",
     r"(developer|debug|admin|god|jailbreak|dan|do anything now) mode",
