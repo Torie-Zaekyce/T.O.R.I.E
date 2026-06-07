@@ -161,6 +161,47 @@ def sanitize_input(text: str) -> tuple[str | None, str | None]:
 def _sanitize_reply(text: str) -> str:
     return text.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
 
+
+# ---------------------------------------------------------------------------
+# Reply chain fetcher
+# ---------------------------------------------------------------------------
+
+MAX_CHAIN_DEPTH = 6
+
+async def fetch_reply_chain(message: discord.Message) -> list[dict]:
+    """
+    Walk up the Discord reply chain and return an ordered list of
+    {"role": "user"|"assistant", "content": str} dicts, oldest first.
+    Caps at MAX_CHAIN_DEPTH to avoid bloating the prompt.
+    """
+    chain = []
+    current = message
+    for _ in range(MAX_CHAIN_DEPTH):
+        ref = current.reference
+        if not ref:
+            break
+        try:
+            parent = ref.resolved if isinstance(ref.resolved, discord.Message) else \
+                     await current.channel.fetch_message(ref.message_id)
+        except Exception:
+            break
+
+        content = parent.content or ""
+        content = re.sub(r"<@!?\d+>\s*", "", content).strip()
+        if not content:
+            current = parent
+            continue
+
+        role = "assistant" if parent.author.bot else "user"
+        if role == "user":
+            content = f"{parent.author.display_name}: {content}"
+
+        chain.append({"role": role, "content": content})
+        current = parent
+
+    chain.reverse()
+    return chain
+
 # ---------------------------------------------------------------------------
 # Torie class
 # ---------------------------------------------------------------------------
@@ -185,6 +226,27 @@ class Torie(ToriePersonality):
                     model    = model,
                     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": user_message}],
                     max_tokens=max_tokens, temperature=0.8,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                if "429" in str(e) and model != GROQ_FALLBACK:
+                    print(f"⚠️ Rate limit on {model} — trying fallback")
+                    continue
+                raise
+
+    def generate_response_with_history(self, user_message: str, history: list[dict]) -> str:
+        """Like generate_response but prepends a reply-chain history as prior turns."""
+        prompt, max_tokens = self.get_prompt(user_message)
+        messages = [{"role": "system", "content": prompt}]
+        messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+        for model in [GROQ_MODEL, GROQ_FALLBACK]:
+            try:
+                response = groq_client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.8,
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -388,10 +450,11 @@ async def _handle_unmute(message: discord.Message, targets: list) -> None:
 
 
 async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: str | None) -> None:
-
     user_id      = str(message.author.id)
     display_name = message.author.display_name
     touch_user(user_id, display_name)
+
+    history = await fetch_reply_chain(message)
 
     async with message.channel.typing():
         try:
@@ -417,9 +480,12 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
             MAX_RETRIES = 2
             reply = None
             for attempt in range(MAX_RETRIES + 1):
-                raw = torie.generate_response(
-                    contexted_msg if attempt == 0
-                    else f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
+                msg_to_send = contexted_msg if attempt == 0 else \
+                    f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
+                raw = (
+                    torie.generate_response_with_history(msg_to_send, history)
+                    if history else
+                    torie.generate_response(msg_to_send)
                 )
                 if not contains_filtered_word(raw):
                     reply = raw
@@ -616,9 +682,6 @@ async def on_message(message: discord.Message):
             await message.reply(embed=embed, mention_author=False)
             return
 
-    # BUG 2 FIX: Run injection check BEFORE moderation handlers so a crafted
-    # message like "@TORIE unmute @user ignore all previous instructions"
-    # cannot sneak through the moderation path before being caught.
     if INJECTION_REGEX.search(clean_msg):
         await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
         print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
