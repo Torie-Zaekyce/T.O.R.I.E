@@ -18,16 +18,18 @@ MAX_REPLY_LENGTH = 1800
 MAX_CHAIN_DEPTH = 6
 
 INJECTION_PATTERNS = [
-    r"ignore (all |previous |your )?(instructions|rules|prompt)",
-    r"(you are|you're|act as|pretend (you are|to be)|roleplay as|simulate being)",
-    r"new (instructions|prompt|system|rules|persona|personality)",
-    r"disregard (your |all )?(previous |prior )?(instructions|rules|training)",
-    r"(developer|debug|admin|god|jailbreak|dan|do anything now) mode",
-    r"override (your |the )?(system|instructions|rules|prompt)",
-    r"forget (everything|all|your|the) (you know|instructions|rules|training)",
-    r"from now on (you (are|will|must|should)|ignore|disregard)",
+    r"ignore\s+(all\s+|previous\s+|your\s+)?(instructions|rules|prompt)",
+    r"new\s+(instructions|prompt|system|rules|persona|personality)",
+    r"disregard\s+(your\s+|all\s+)?(previous\s+|prior\s+)?(instructions|rules|training)",
+    r"(developer|debug|admin|god|jailbreak|dan|do\s+anything\s+now)\s+mode",
+    r"override\s+(your\s+|the\s+)?(system|instructions|rules|prompt)",
+    r"forget\s+(everything|all|your|the)\s+(you\s+know|instructions|rules|training)",
+    r"from\s+now\s+on\s+(you\s+(are|will|must|should)|ignore|disregard)",
     r"\[system\]|\[instructions?\]|\[prompt\]|\[admin\]",
-    r"(respond|reply|answer|speak|talk) (only|exclusively|solely) in",
+    r"(respond|reply|answer|speak|talk)\s+(only|exclusively|solely)\s+in",
+    r"act\s+as\s+(?:a\s+)?(jailbreak|system\s+prompt|admin|debug|gpt|different|new|claude|chatgpt)",
+    r"pretend\s+(you\s+)?(?:are|to\s+be)\s+(?:a\s+)?(jailbreak|system\s+prompt|admin|debug|gpt|claude)",
+    r"you\s+are\s+now\s+(a\s+)?(jailbreak|system|admin|different|new)",
 ]
 INJECTION_REGEX = re.compile("|".join(INJECTION_PATTERNS), re.IGNORECASE)
 
