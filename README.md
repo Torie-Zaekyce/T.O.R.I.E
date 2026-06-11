@@ -44,7 +44,7 @@ Automatic messages at 7AM, 12PM, 7PM, 7:30PM, and midnight PHT — morning greet
 | Discord | discord.py 2.x |
 | AI | Groq API (LLaMA 3.3 70B + LLaMA 3.1 8B fallback) |
 | Vision | Groq Vision (Llama 4 Scout) |
-| Music | yt-dlp + Spotify API + Deezer |
+| Music | ⚠️ **DEPRECATED** — yt-dlp + Spotify API + Deezer (not maintained) |
 | Database | MongoDB Atlas (M0 free tier) |
 | GIFs | Klipy GIF API |
 | Hosting | Railway (chat) + Oracle VPS (music) |
@@ -56,14 +56,19 @@ Automatic messages at 7AM, 12PM, 7PM, 7:30PM, and midnight PHT — morning greet
 ```
 T.O.R.I.E./
 │
-├── main.py                  ← entry point, bot events, moderation handlers
+├── main.py                  ← entry point, Discord events, AI chat, response logic
 │
 ├── bot/
 │   ├── __init__.py
-│   ├── commands.py          ← all prefix + slash commands
+│   ├── commands.py          ← all prefix + slash commands (~1200 lines)
+│   ├── config.py            ← centralized constants, API keys, channel IDs
+│   ├── utils.py             ← helper functions (parse_duration, sanitize_input, fetch_reply_chain)
+│   ├── moderation.py        ← moderation handlers (warn, mute, unmute, auto-unmute)
 │   ├── personality.py       ← AI personality, system prompt, custom traits
+│   ├── user_memory.py       ← MongoDB user memory and fact extraction
 │   ├── greetings.py         ← scheduled message pools
-│   └── music.py             ← music system
+│   ├── minigames.py         ← game commands
+│   └── music.py             ← ⚠️ DEPRECATED — music system (not maintained)
 │
 ├── .env                     ← local secrets (never commit)
 ├── .env.example             ← key template
@@ -72,6 +77,21 @@ T.O.R.I.E./
 ├── Procfile
 └── README.md
 ```
+
+### Architecture Notes
+
+**Modular Design:** The codebase is organized into single-responsibility modules:
+- **config.py** — All constants, channel IDs, model names, and regex patterns compiled at import time for performance
+- **utils.py** — Reusable functions for text processing, duration parsing, and Discord context handling
+- **moderation.py** — Self-contained moderation logic with embed creation and role management
+- **commands.py** — All user-facing commands (prefix, slash, interactions)
+- **personality.py** — AI personality system with advice detection and custom traits
+- **user_memory.py** — MongoDB integration for persistent user facts and memory extraction
+
+**Performance Optimizations:**
+- Regex patterns compiled at module load time (not on every function call)
+- Efficient advice detection using precompiled regex instead of substring iteration
+- Normalized word filter with leet-speak protection
 
 ---
 
@@ -113,6 +133,7 @@ T.O.R.I.E. will auto-create these collections inside a `torie` database:
 | `filtered_words` | Custom word filter list |
 | `warns` | User warning history |
 | `permissions` | Custom permission grants |
+| `user_memory` | User facts and interaction history |
 
 ### 5. Run locally
 ```bash
@@ -189,8 +210,10 @@ Family members have default permissions without needing a grant — parents have
 
 ## Hosting
 
-### (deprecated) Music (Oracle VPS or any self-hosted server)
-Railway bans music bots. For music, deploy to a free Oracle Cloud VM (ARM A1 Flex, always free):
+### ⚠️ Music (DEPRECATED — Not Maintained)
+The music system is no longer actively maintained. The music.py module will be removed in a future version.
+
+If you still want to use it, deploy to a free Oracle Cloud VM (ARM A1 Flex, always free) since Railway bans music bots:
 
 ```bash
 # Install dependencies
@@ -202,6 +225,8 @@ screen -S torie
 python main.py
 # Ctrl+A, D to detach
 ```
+
+> **Note:** Consider replacing the music system with Discord's built-in streaming features or external music bots instead.
 
 ---
 
