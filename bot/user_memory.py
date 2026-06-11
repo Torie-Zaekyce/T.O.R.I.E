@@ -5,7 +5,8 @@ import re
 import json
  
 MAX_FACTS = 20
- 
+_CODE_BLOCK_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.DOTALL)
+
 _MONGO_UNAVAILABLE = object()
 _mongo_client      = None
 _memory_col        = None
@@ -45,12 +46,8 @@ def _col():
             _memory_col = client["torie"]["user_memory"]
             _memory_col.create_index("_id", unique=True)
     return _memory_col
- 
- 
-# ---------------------------------------------------------------------------
-# Read
-# ---------------------------------------------------------------------------
- 
+
+
 def get_user_memory(user_id: str) -> dict | None:
     col = _col()
     if col is None:
@@ -71,12 +68,8 @@ def all_memories() -> list[dict]:
     except Exception as e:
         print(f"⚠️ [user_memory] list error: {e}")
         return []
- 
- 
-# ---------------------------------------------------------------------------
-# Write
-# ---------------------------------------------------------------------------
- 
+
+
 def touch_user(user_id: str, display_name: str) -> None:
     """Create the document on first sight or just bump last_seen + interaction_count."""
     col = _col()
@@ -187,12 +180,8 @@ def delete_user(user_id: str) -> bool:
     except Exception as e:
         print(f"⚠️ [user_memory] delete error: {e}")
         return False
- 
- 
-# ---------------------------------------------------------------------------
-# Context helper
-# ---------------------------------------------------------------------------
- 
+
+
 def build_memory_note(user_id: str) -> str | None:
     """
     Returns a compact string to inject into the AI prompt, or None if no facts.
@@ -204,10 +193,6 @@ def build_memory_note(user_id: str) -> str | None:
     facts_text = " ".join(f"{f}." for f in doc["facts"])
     return f"Known facts about this user: {facts_text}"
 
-
-# ---------------------------------------------------------------------------
-# Fact extraction (called after each AI reply)
-# ---------------------------------------------------------------------------
 
 def extract_and_save_facts(user_id: str, display_name: str, user_message: str, groq_client, model: str) -> None:
     """
@@ -236,7 +221,7 @@ def extract_and_save_facts(user_id: str, display_name: str, user_message: str, g
             temperature=0.2,
         )
         raw = response.choices[0].message.content.strip()
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL).strip()
+        raw = _CODE_BLOCK_RE.sub("", raw).strip()
         facts = json.loads(raw)
         if isinstance(facts, list) and facts:
             clean = [str(f).strip() for f in facts if isinstance(f, str) and f.strip()]

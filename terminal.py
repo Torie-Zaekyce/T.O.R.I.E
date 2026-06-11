@@ -48,8 +48,6 @@ class TerminalClient(discord.Client):
         self._voice_client: discord.VoiceClient | None = None
         self._tts_voice: str = "en-US-AriaNeural"
 
-    # ------------------------------------------------------------------ events
-
     async def on_ready(self):
         print()
         print(_c("=" * 52, _CYAN, _BOLD))
@@ -82,8 +80,6 @@ class TerminalClient(discord.Client):
             print(f"\r{prefix}: {content}{attachments}{embeds}")
             print(_c(">>> ", _YELLOW), end="", flush=True)
 
-    # ------------------------------------------------------------------ input loop
-
     async def _input_loop(self):
         loop = asyncio.get_running_loop()
         print(_c(">>> ", _YELLOW), end="", flush=True)
@@ -101,8 +97,6 @@ class TerminalClient(discord.Client):
                 continue
 
             await self._handle_command(line)
-
-    # ------------------------------------------------------------------ command dispatcher
 
     async def _handle_command(self, line: str):
         parts = line.split(None, 2)
@@ -163,8 +157,6 @@ class TerminalClient(discord.Client):
 
         print(_c(">>> ", _YELLOW), end="", flush=True)
 
-    # ------------------------------------------------------------------ /watch
-
     async def _cmd_watch(self, parts: list):
         if len(parts) < 2:
             print(_c("  Usage: /watch <#channel-name or channel_id>", _YELLOW))
@@ -194,8 +186,6 @@ class TerminalClient(discord.Client):
         except discord.Forbidden:
             print(_c("  ⚠️  Can't read history (no permission).", _YELLOW))
 
-    # ------------------------------------------------------------------ /send
-
     async def _cmd_send(self, parts: list):
         if len(parts) < 3:
             print(_c("  Usage: /send <#channel or id> <message>", _YELLOW))
@@ -216,8 +206,6 @@ class TerminalClient(discord.Client):
             print(_c("  ❌ No permission to send in that channel.", _RED))
         except Exception as e:
             print(_c(f"  ❌ Error: {e}", _RED))
-
-    # ------------------------------------------------------------------ /dm
 
     async def _cmd_dm(self, parts: list):
         if len(parts) < 3:
@@ -240,8 +228,6 @@ class TerminalClient(discord.Client):
         except Exception as e:
             print(_c(f"  ❌ Error: {e}", _RED))
 
-    # ------------------------------------------------------------------ /channels
-
     def _cmd_channels(self):
         for guild in self.guilds:
             print(_c(f"\n  [{guild.name}]", _MAGENTA, _BOLD))
@@ -253,14 +239,10 @@ class TerminalClient(discord.Client):
                 if not flags:            flags.append(_c("no access", _GREY))
                 print(f"    #{ch.name:<30} {ch.id}  [{', '.join(flags)}]")
 
-    # ------------------------------------------------------------------ /guilds
-
     def _cmd_guilds(self):
         print(_c("\n  Guilds the bot is in:", _CYAN))
         for guild in self.guilds:
             print(f"    {_c(guild.name, _BOLD)}  (id: {guild.id}, members: {guild.member_count})")
-
-    # ------------------------------------------------------------------ /join
 
     async def _cmd_join(self, parts: list):
         if len(parts) < 2:
@@ -298,8 +280,6 @@ class TerminalClient(discord.Client):
         except Exception as e:
             print(_c(f"  ❌ Error joining voice: {e}", _RED))
 
-    # ------------------------------------------------------------------ /leave
-
     async def _cmd_leave(self):
         if not self._voice_client or not self._voice_client.is_connected():
             print(_c("  ⚠️  Not connected to any voice channel.", _YELLOW))
@@ -308,8 +288,6 @@ class TerminalClient(discord.Client):
         await self._voice_client.disconnect()
         self._voice_client = None
         print(_c(f"  ✅ Left 🔊 {name}", _GREEN))
-
-    # ------------------------------------------------------------------ /vc
 
     def _cmd_vc(self):
         for guild in self.guilds:
@@ -325,8 +303,6 @@ class TerminalClient(discord.Client):
                 can_join = _c("connect", _BLUE) if perms.connect else _c("no access", _GREY)
                 occupants = _c(f"  [{', '.join(members)}]", _CYAN) if members else _c("  [empty]", _GREY)
                 print(f"    🔊 {ch.name:<30} {ch.id}  [{can_join}]{occupants}{joined}")
-
-    # ------------------------------------------------------------------ /tts
 
     async def _cmd_tts(self, parts: list):
         if not _TTS_AVAILABLE:
@@ -375,8 +351,6 @@ class TerminalClient(discord.Client):
             except OSError:
                 pass
 
-    # ------------------------------------------------------------------ /voice
-
     async def _cmd_set_voice(self, parts: list):
         if not _TTS_AVAILABLE:
             print(_c("  ❌ edge-tts is not installed. Run: pip install edge-tts", _RED))
@@ -398,8 +372,6 @@ class TerminalClient(discord.Client):
             print(_c(f"  ✅ TTS voice set to {_c(self._tts_voice, _CYAN)}", _GREEN))
         except Exception as e:
             print(_c(f"  ❌ Error fetching voices: {e}", _RED))
-
-    # ------------------------------------------------------------------ /voices
 
     async def _cmd_voices(self):
         if not _TTS_AVAILABLE:
@@ -431,8 +403,6 @@ class TerminalClient(discord.Client):
                 active = _c(" ◄", _GREEN) if n == self._tts_voice else ""
                 print(f"{label} {n}{active}")
         print()
-
-    # ------------------------------------------------------------------ helpers
 
     def _resolve_voice_channel(self, target: str) -> discord.VoiceChannel | None:
         if target.isdigit():
@@ -472,8 +442,6 @@ class TerminalClient(discord.Client):
                 if member.name.lower() == target_lower or member.display_name.lower() == target_lower:
                     return member
         return None
-
-    # ------------------------------------------------------------------ quit
 
     async def _quit(self):
         print(_c("\n  👋 Disconnecting...", _YELLOW))

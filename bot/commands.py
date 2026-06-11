@@ -10,14 +10,10 @@ from datetime import datetime
 from discord.ext import commands
 import pymongo
 
-# ---- User Memory ----
-
 from bot.user_memory import (
     get_user_memory, all_memories, add_single_fact,
     remove_fact_by_index, clear_facts, delete_user as delete_user_memory,
 )
-
-# ---- Family dicts ----
 
 PARENTS = {
     "dad":  {"username": "TorieRingo", "id": 691976042910580767, "title": "Dad", "role": "Creator"},
@@ -26,7 +22,7 @@ PARENTS = {
 COUSIN = {
     "cousin_stelle": {"username": "Stelle", "id": 993375226664591390,  "title": "Starry Cousin",  "role": "Purple Star"},
     "cousin_crois":  {"username": "Crois",  "id": 1276054519561846840, "title": "Bread Cousin",   "role": "Croissant"},
-    "cousin_hyu":    {"username": "Hyuluk", "id": 1196640036465148035, "title": "Curious Cousin", "role": "Curiousity"},
+    "cousin_hyu":    {"username": "Hyuluk", "id": 1196640036465148035, "title": "Curious Cousin", "role": "Curiosity"},
     "cousin_mimi":   {"username": "Mimi",   "id": 1076407798809776138, "title": "Serious Cousin", "role": "Sekai"},
 }
 UNCLE = {
@@ -50,6 +46,14 @@ for _group in (PARENTS, COUSIN, UNCLE, SISTER, BROTHER_IN_LAW):
         _ID_TO_ROLE[_data["id"]]                = _key
         _NAME_TO_ROLE[_data["username"].lower()] = _key
 
+_MSG_LINK_RE = re.compile(r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)")
+_MENTION_RE = re.compile(r"<@!?\d+>")
+_WARN_RE = re.compile(r"\bwarn\b", re.I)
+_MUTE_RE = re.compile(r"\bmute\b", re.I)
+_UNMUTE_RE = re.compile(r"\bunmute\b", re.I)
+_WORD_BOUNDARY_RE = re.compile(r"\b\w+\b")
+_MENTION_AVOIDANCE_RE = re.compile(r"@everyone|@here")
+
 def get_role(user) -> str | None:
     return _ID_TO_ROLE.get(user.id) or _NAME_TO_ROLE.get(str(user.name).lower())
 
@@ -63,8 +67,6 @@ HUSBAND  = {}
 FRIENDS  = {}
 
 FILTERED_WORDS = ["retard", "nigger", "nigga", "negro", "negra"]
-
-# ---- MongoDB Store (shared client) ----
 
 _MONGO_UNAVAILABLE = object()
 _mongo_client = None
@@ -125,9 +127,6 @@ def get_perm_col():
         if c: _perm_col = c["torie"]["permissions"]
     return _perm_col
 
-
-# ---- Birthday helpers ----
-
 def load_birthdays() -> dict:
     col = get_birthday_col()
     if col is None: return {}
@@ -151,9 +150,6 @@ def delete_birthday(user_id: str):
         col.delete_one({"_id": user_id})
     except Exception as e:
         print(f"⚠️ Failed to delete birthday: {e}")
-
-
-# ---- Filter word helpers ----
 
 def load_filter_words() -> list[str]:
     col = get_filter_col()
@@ -179,9 +175,6 @@ def _init_filter_words():
 
 _init_filter_words()
 BIRTHDAYS: dict = load_birthdays()
-
-
-# ---- Warn helpers ----
 
 def load_warns(user_id: str) -> list:
     col = get_warn_col()
@@ -215,9 +208,6 @@ def clear_warns(user_id: str):
     except Exception as e:
         print(f"⚠️ Failed to clear warns: {e}")
 
-
-# ---- Permission helpers ----
-
 VALID_PERMS = {"mute", "unmute", "filter", "personality", "purge", "sendmsg", "warn", "mod"}
 
 _FAMILY_DEFAULT_PERMS: dict[str, set] = {
@@ -247,14 +237,6 @@ _INTERACTION_ACTIONS: dict[str, tuple[str, str]] = {
 }
 
 _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
-
-_MSG_LINK_RE = re.compile(
-    r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/"
-    r"(\d+)/(\d+)/(\d+)"
-)
-
-
-# ---- Klipy GIF search ----
 
 async def _search_klipy_gif(query: str) -> str | None:
     KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
@@ -288,9 +270,6 @@ async def _search_klipy_gif(query: str) -> str | None:
     except Exception as e:
         print(f"⚠️ Klipy GIF search error: {type(e).__name__}: {e}")
         return None
-
-
-# ---- Permission DB helpers ----
 
 def load_user_perms(user_id: int) -> set:
     col = get_perm_col()
@@ -329,8 +308,6 @@ def has_permission(user, perm: str) -> bool:
     return "mod" in db_perms or perm in db_perms
 
 
-# ---- Word filter ----
-
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
     "5": "s",  "6": "g",  "7": "t",  "8": "b",
@@ -351,11 +328,15 @@ FILTER_WHITELIST = {
     "vinegar", "renegade",
 }
 
+_ZERO_WIDTH_RE = re.compile(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]')
+_REPEAT_CHAR_RE = re.compile(r'(.)\1{2,}')
+_NON_ALPHANUMERIC_RE = re.compile(r'[^a-z0-9]')
+
 def normalize(text: str) -> str:
     text = text.lower().translate(NORMALIZER)
-    text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060\ufeff]', '', text)
-    text = re.sub(r'(.)\1{2,}', r'\1\1', text)
-    return re.sub(r'[^a-z0-9]', '', text)
+    text = _ZERO_WIDTH_RE.sub('', text)
+    text = _REPEAT_CHAR_RE.sub(r'\1\1', text)
+    return _NON_ALPHANUMERIC_RE.sub('', text)
 
 _NORM_SLURS:   dict[str, str] = {}
 _MAX_SLUR_LEN: int            = 0
@@ -369,7 +350,7 @@ _rebuild_filter_cache()
 
 
 def contains_filtered_word(content: str) -> str | None:
-    tokens = re.findall(r'\b\w+\b', content.lower())
+    tokens = _WORD_BOUNDARY_RE.findall(content.lower())
     for token in tokens:
         if token in FILTER_WHITELIST:
             continue
@@ -394,13 +375,7 @@ def get_todays_birthdays() -> list[dict]:
     ]
 
 
-# ---------------------------------------------------------------------------
-# setup_commands
-# ---------------------------------------------------------------------------
-
 def setup_commands(bot: commands.Bot):
-
-    # ---- Help ----
 
     @bot.command(name="help")
     async def help_command(ctx):
@@ -458,8 +433,6 @@ def setup_commands(bot: commands.Bot):
         ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
-
-    # ---- Filter ----
 
     @bot.group(name="filter", invoke_without_command=True)
     async def filter_group(ctx):
@@ -523,8 +496,6 @@ def setup_commands(bot: commands.Bot):
         _rebuild_filter_cache()
         save_filter_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} filtered word(s). 🧹", color=discord.Color.green()))
-
-    # ---- Birthday ----
 
     @bot.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(ctx):
@@ -644,8 +615,6 @@ def setup_commands(bot: commands.Bot):
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
             await ctx.send(embed=embed)
 
-    # ---- Personality ----
-
     @bot.group(name="personality", aliases=["persona"], invoke_without_command=True)
     async def personality_group(ctx):
         await ctx.send(embed=discord.Embed(
@@ -702,8 +671,6 @@ def setup_commands(bot: commands.Bot):
         CUSTOM_TRAITS.clear()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} trait(s). Back to default me! 😊", color=discord.Color.green()))
 
-    # ---- Warns ----
-
     @bot.command(name="warns")
     async def warns_cmd(ctx, member: discord.Member = None, action: str = None):
         if not member:
@@ -733,8 +700,6 @@ def setup_commands(bot: commands.Bot):
         )
         embed.set_footer(text=f"{len(warns)} warning(s) total")
         await ctx.send(embed=embed)
-
-    # ---- Permissions ----
 
     @bot.group(name="perm", invoke_without_command=True)
     async def perm_group(ctx):
@@ -790,8 +755,6 @@ def setup_commands(bot: commands.Bot):
             color       = discord.Color.blurple()
         )
         await ctx.send(embed=embed)
-
-    # ---- General ----
 
     _WHOAMI_RESPONSES = {
         "dad":           "You're my Dad — the one who built me. 🛠️ I owe you my existence. No pressure. 😂",
@@ -861,8 +824,6 @@ def setup_commands(bot: commands.Bot):
         )
         await ctx.send(embed=embed)
 
-    # ---- Purge ----
-
     @bot.command(name="purge")
     async def purge(ctx, amount: int = None):
         if not has_permission(ctx.author, "purge"):
@@ -880,8 +841,6 @@ def setup_commands(bot: commands.Bot):
             await ctx.send(embed=discord.Embed(description="⛔ I don't have permission to delete messages here.", color=discord.Color.red()))
         except Exception as e:
             print(f"❌ Purge error: {e}")
-
-    # ---- Slash: /sendmsg ----
 
     @bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
     @discord.app_commands.describe(
@@ -907,7 +866,7 @@ def setup_commands(bot: commands.Bot):
             await interaction.response.send_message("⚠️ Message is too long (max 2000 characters).", ephemeral=True)
             return
         if message:
-            message = message.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+            message = _MENTION_AVOIDANCE_RE.sub(lambda m: "@\u200b" + m.group()[1:], message)
 
         reference: discord.MessageReference | None = None
         if reply_to:
@@ -997,8 +956,6 @@ def setup_commands(bot: commands.Bot):
             await interaction.followup.send("❌ Something went wrong.", ephemeral=True)
             print(f"❌ /sendmsg error: {type(e).__name__}: {e}")
 
-    # ---- Interaction helpers ----
-
     async def _run_interaction(ctx, target: discord.Member, action: str):
         if action not in _INTERACTION_ACTIONS:
             await ctx.send(embed=discord.Embed(
@@ -1015,43 +972,15 @@ def setup_commands(bot: commands.Bot):
         embed.set_footer(text="T.O.R.I.E. GIFs Powered by KLIPY GIF")
         await ctx.send(embed=embed)
 
-    @bot.command(name="hug")
-    async def cmd_hug(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "hug")
-
-    @bot.command(name="kiss")
-    async def cmd_kiss(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "kiss")
-
-    @bot.command(name="pat")
-    async def cmd_pat(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "pat")
-
-    @bot.command(name="bite")
-    async def cmd_bite(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "bite")
-
-    @bot.command(name="lick")
-    async def cmd_lick(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "lick")
-
-    @bot.command(name="punch")
-    async def cmd_punch(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "punch")
-
-    @bot.command(name="kick")
-    async def cmd_kick(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "kick")
-
-    @bot.command(name="fuck")
-    async def cmd_fuck(ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "fuck")
+    _interaction_commands = ["hug", "kiss", "pat", "bite", "lick", "punch", "kick", "fuck"]
+    for cmd_name in _interaction_commands:
+        @bot.command(name=cmd_name)
+        async def interaction_cmd(ctx, target: discord.Member, action=cmd_name):
+            await _run_interaction(ctx, target, action)
 
     @bot.command(name="tor")
     async def cmd_tor(ctx, action: str, target: discord.Member):
         await _run_interaction(ctx, target, action.lower())
-
-    # ---- Memory ----
 
     @bot.group(name="memory", aliases=["mem"], invoke_without_command=True)
     async def memory_group(ctx):
@@ -1067,14 +996,11 @@ def setup_commands(bot: commands.Bot):
             ),
             color = discord.Color.blurple()
         ))
-
     @memory_group.command(name="view")
     async def memory_view(ctx, member: discord.Member = None):
         target = member or ctx.author
         if member and member != ctx.author and not get_parent_role(ctx.author):
-            await ctx.send(embed=discord.Embed(
-                description="⛔ Only my parents can view other people's memories.", color=discord.Color.red()
-            ))
+            await ctx.send(embed=discord.Embed(description="⛔ Only my parents can view other people's memories.", color=discord.Color.red()))
             return
         doc = get_user_memory(str(target.id))
         if not doc or not doc.get("facts"):

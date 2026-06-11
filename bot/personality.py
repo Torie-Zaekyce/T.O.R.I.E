@@ -1,8 +1,19 @@
 # personality.py — T.O.R.I.E.'s Personality Base Class
 
+import re
+
 # Custom traits added at runtime via t!personality add
 # Parents can add/remove these without restarting the bot
 CUSTOM_TRAITS: list[str] = []
+
+_ADVICE_KEYWORDS = [
+    "advice", "advise", "should i", "what should", "help me decide",
+    "what do you think", "what would you do", "how do i deal",
+    "how should i", "i don't know what to do", "what to do",
+    "i need help with", "can you help me with", "struggling with",
+    "having trouble", "having a hard time", "going through"
+]
+_ADVICE_KEYWORDS_RE = re.compile(r"\b(" + "|".join(re.escape(kw) for kw in _ADVICE_KEYWORDS) + r")\b")
 
 
 class ToriePersonality:
@@ -92,14 +103,6 @@ Whatever happens, you'll feel better for having said it."
 
 ALWAYS: Be a real friend, not a generic advice bot."""
 
-    ADVICE_KEYWORDS = [
-        "advice", "advise", "should i", "what should", "help me decide",
-        "what do you think", "what would you do", "how do i deal",
-        "how should i", "i don't know what to do", "what to do",
-        "i need help with", "can you help me with", "struggling with",
-        "having trouble", "having a hard time", "going through"
-    ]
-
     @property
     def SYSTEM_PROMPT(self) -> str:
         if not CUSTOM_TRAITS:
@@ -111,8 +114,7 @@ ALWAYS: Be a real friend, not a generic advice bot."""
         )
 
     def is_advice_request(self, message: str) -> bool:
-        lowered = message.lower()
-        return any(keyword in lowered for keyword in self.ADVICE_KEYWORDS)
+        return bool(_ADVICE_KEYWORDS_RE.search(message.lower()))
 
     def get_prompt(self, message: str) -> tuple[str, int]:
         if self.is_advice_request(message):

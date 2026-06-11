@@ -5,4 +5,4 @@ pymongo[srv]>=4.7.0
 certifi
 aiohttp
 python-dotenv
- 
+edge-tts
