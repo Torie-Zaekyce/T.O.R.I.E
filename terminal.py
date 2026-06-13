@@ -118,6 +118,68 @@ _TORIE_COMMANDS = """
     note=_GREY,
 )
 
+# ---------------------------------------------------------------------------
+# Bot command routing table
+#
+# Each entry maps the sub-command name to a tuple:
+#   (send_mode, aliases)
+#
+#   send_mode:
+#     "prefix"  → send as  t!<sub> <args>
+#     "mention" → send as  @bot <sub> <args>   (moderation commands)
+#     "raw"     → send exactly what the user typed after /t (advanced / passthrough)
+#
+#   aliases: additional names the user may type that map to this sub
+# ---------------------------------------------------------------------------
+_CMD_TABLE: dict[str, tuple[str, list[str]]] = {
+    # General
+    "ping":        ("prefix",  []),
+    "whoami":      ("prefix",  []),
+    "greet":       ("prefix",  []),
+    "family":      ("prefix",  []),
+    "purge":       ("prefix",  []),
+
+    # Moderation  — must be @mention so the bot's on_message handler picks them up
+    "mute":        ("mention", []),
+    "unmute":      ("mention", []),
+    "warn":        ("mention", []),
+
+    # Warns (prefix, handled by setup_commands / t!warns)
+    "warns":       ("prefix",  []),
+
+    # Word filter
+    "filter":      ("prefix",  []),
+
+    # Permissions
+    "perm":        ("prefix",  ["perms"]),
+
+    # Birthdays
+    "birthday":    ("prefix",  ["bday"]),
+
+    # Personality
+    "personality": ("prefix",  ["persona"]),
+
+    # Memory
+    "memory":      ("prefix",  ["mem"]),
+
+    # Interactions
+    "hug":         ("prefix",  []),
+    "kiss":        ("prefix",  []),
+    "pat":         ("prefix",  []),
+    "bite":        ("prefix",  []),
+    "lick":        ("prefix",  []),
+    "punch":       ("prefix",  []),
+    "kick":        ("prefix",  []),
+    "fuck":        ("prefix",  []),
+    "tor":         ("prefix",  []),
+}
+
+# Build reverse-alias lookup: alias → canonical name
+_ALIAS_MAP: dict[str, str] = {}
+for _canonical, (_mode, _aliases) in _CMD_TABLE.items():
+    for _alias in _aliases:
+        _ALIAS_MAP[_alias] = _canonical
+
 
 class TerminalClient(discord.Client):
 
@@ -271,18 +333,15 @@ class TerminalClient(discord.Client):
 
     async def _cmd_bot_passthrough(self, rest: str):
         """
-        Translate /t <subcommand> into the matching t! or @mention bot command
-        and send it to the watched channel so the bot processes it normally.
+        Translate /t <subcommand> [args] into the correct bot message format
+        and send it to the watched channel.
 
-        Supported sub-commands mirror everything in commands.py:
-          ping · whoami · greet · family · purge
-          mute · unmute · warn · warns
-          filter (add/remove/list/clear)
-          perm (add/remove/list)
-          birthday / bday (add/remove/list/today)
-          personality / persona (add/remove/list/clear)
-          memory / mem (view/add/remove/clear/delete/list)
-          hug · kiss · pat · bite · lick · punch · kick · fuck · tor
+        Routing is driven by _CMD_TABLE:
+          prefix  → t!<sub> <args>
+          mention → @bot <sub> <args>
+
+        Aliases (e.g. "bday" → "birthday", "mem" → "memory") are resolved
+        automatically so the canonical t! / @mention name is always used.
         """
         if not self.watched_channel:
             print(_c("  ⚠️  Use /watch <channel> first.", _YELLOW))
@@ -293,28 +352,28 @@ class TerminalClient(discord.Client):
             return
 
         parts    = rest.split(None, 1)
-        sub      = parts[0].lower()
+        sub_raw  = parts[0].lower()
         sub_rest = parts[1] if len(parts) > 1 else ""
 
-        # Commands that use t! prefix
-        PREFIX_CMDS = {
-            "ping", "whoami", "greet", "family", "purge",
-            "warns", "filter", "perm", "birthday", "bday",
-            "personality", "persona", "memory", "mem",
-            "hug", "kiss", "pat", "bite", "lick", "punch", "kick", "fuck",
-            "tor",
-        }
+        # Resolve alias → canonical name
+        sub = _ALIAS_MAP.get(sub_raw, sub_raw)
 
-        MENTION_CMDS = {"mute", "unmute", "warn"}
-
-        if sub in PREFIX_CMDS:
-            bot_msg = f"t!{sub} {sub_rest}".strip()
-        elif sub in MENTION_CMDS:
-            bot_user = self.user
-            bot_msg  = f"<@{bot_user.id}> {sub} {sub_rest}".strip()
-        else:
-            print(_c(f"  ❓ Unknown bot sub-command: {sub}  (type /help to see all)", _YELLOW))
+        if sub not in _CMD_TABLE:
+            print(_c(
+                f"  ❓ Unknown bot sub-command: {sub_raw}  (type /help to see all)",
+                _YELLOW
+            ))
             return
+
+        send_mode, _ = _CMD_TABLE[sub]
+
+        if send_mode == "prefix":
+            bot_msg = f"t!{sub} {sub_rest}".strip()
+        elif send_mode == "mention":
+            bot_msg = f"<@{self.user.id}> {sub} {sub_rest}".strip()
+        else:
+            # "raw" — pass through exactly as typed
+            bot_msg = rest.strip()
 
         try:
             await self.watched_channel.send(bot_msg)
