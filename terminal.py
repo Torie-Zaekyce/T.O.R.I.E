@@ -22,18 +22,101 @@ if not DISCORD_TOKEN:
     sys.exit(1)
 
 # ANSI colour helpers
-_RESET  = "\033[0m"
-_BOLD   = "\033[1m"
-_CYAN   = "\033[96m"
-_GREEN  = "\033[92m"
-_YELLOW = "\033[93m"
-_RED    = "\033[91m"
-_GREY   = "\033[90m"
-_BLUE   = "\033[94m"
+_RESET   = "\033[0m"
+_BOLD    = "\033[1m"
+_CYAN    = "\033[96m"
+_GREEN   = "\033[92m"
+_YELLOW  = "\033[93m"
+_RED     = "\033[91m"
+_GREY    = "\033[90m"
+_BLUE    = "\033[94m"
 _MAGENTA = "\033[95m"
+_PINK    = "\033[95m"
 
 def _c(text, *codes): return "".join(codes) + str(text) + _RESET
 def _ts(): return _c(datetime.now().strftime("%H:%M:%S"), _GREY)
+
+
+# ---------------------------------------------------------------------------
+# Help text
+# ---------------------------------------------------------------------------
+_TORIE_COMMANDS = """
+  {title}
+
+  {sect}── General ──{r}
+    /t ping                              Check bot latency
+    /t whoami                            Who you are to T.O.R.I.E.
+    /t greet                             Get a personalised greeting
+    /t family                            Show T.O.R.I.E.'s whole family
+    /t purge <1-100>                     Delete recent messages
+
+  {sect}── Moderation ──{r}
+    /t mute @user <duration>             Mute a user  (e.g. 10m)
+    /t unmute @user                      Unmute a user
+    /t warn @user [reason]               Warn + auto-mute 10 min
+    /t warns @user                       View warn history
+    /t warns @user clear                 Clear warns
+
+  {sect}── Word Filter ──{r}
+    /t filter add <word>                 Add word to filter
+    /t filter remove <word>              Remove word from filter
+    /t filter list                       List filtered words
+    /t filter clear                      Clear all filtered words
+
+  {sect}── Permissions ──{r}
+    /t perm add @user <perm>             Grant a permission
+    /t perm remove @user <perm>          Revoke a permission
+    /t perm list [@user]                 View permissions
+    Perms: mute  unmute  filter  personality  purge  sendmsg  warn  mod
+
+  {sect}── Birthdays ──{r}
+    /t birthday add <MM-DD>              Register a birthday
+    /t birthday remove                   Remove your birthday
+    /t birthday list                     List all birthdays
+    /t birthday today                    Check today's birthdays
+
+  {sect}── Personality ──{r}
+    /t personality add <trait>           Add a personality trait
+    /t personality remove <number>       Remove a trait by number
+    /t personality list                  List active traits
+    /t personality clear                 Clear all traits
+
+  {sect}── Memory ──{r}
+    /t memory view [@user]               View memories for a user
+    /t memory add @user <fact>           Manually add a memory
+    /t memory remove @user <number>      Remove a memory by number
+    /t memory clear @user                Wipe all facts for a user
+    /t memory delete @user               Remove user from memory entirely
+    /t memory list                       List all remembered users
+
+  {sect}── Interactions ──{r}
+    /t hug/kiss/pat/bite/lick/punch/kick/fuck @user
+    /t tor <action> @user                Same via tor command
+
+  {sect}── Terminal ──{r}
+    /watch <#channel or id>              Start watching a channel
+    /unwatch                             Stop watching
+    /send <#channel or id> <message>     Send to a specific channel
+    /dm <user_id or name> <message>      Send a DM
+    /join <voice channel>                Join a voice channel
+    /leave                               Leave voice channel
+    /vc                                  List voice channels
+    /tts <text>                          Speak text in voice channel
+    /voice [name]                        Get/set TTS voice
+    /voices                              List all TTS voices
+    /channels                            List all text channels
+    /guilds                              List all guilds
+    /help                                Show this help
+    /quit                                Disconnect and exit
+
+  {note}Tip: /t commands are sent as bot commands in the watched channel.
+  You can also type bare text in the watched channel directly.{r}
+""".format(
+    title=_c("  T.O.R.I.E. Terminal — Command Reference", _CYAN, _BOLD),
+    sect=_YELLOW,
+    r=_RESET,
+    note=_GREY,
+)
 
 
 class TerminalClient(discord.Client):
@@ -48,15 +131,21 @@ class TerminalClient(discord.Client):
         self._voice_client: discord.VoiceClient | None = None
         self._tts_voice: str = "en-US-AriaNeural"
 
+    # -----------------------------------------------------------------------
+    # Discord events
+    # -----------------------------------------------------------------------
+
     async def on_ready(self):
         print()
         print(_c("=" * 52, _CYAN, _BOLD))
-        print(_c(f"  T.O.R.I.E. Terminal Messenger", _CYAN, _BOLD))
+        print(_c("  T.O.R.I.E. Terminal Messenger", _CYAN, _BOLD))
         print(_c(f"  Logged in as {self.user}", _GREEN))
         print(_c(f"  Guilds : {len(self.guilds)}", _GREY))
         print(_c("=" * 52, _CYAN, _BOLD))
         print()
-        print(_c("Commands: /watch  /unwatch  /send  /dm  /join  /leave  /vc  /tts  /voice  /voices  /channels  /guilds  /quit", _YELLOW))
+        print(_c("  Terminal commands: /watch  /unwatch  /send  /dm  /join  /leave", _YELLOW))
+        print(_c("  /vc  /tts  /voice  /voices  /channels  /guilds  /help  /quit", _YELLOW))
+        print(_c("  Bot commands: prefix with /t  (e.g.  /t ping,  /t birthday list)", _YELLOW))
         print()
         self._input_task = asyncio.create_task(self._input_loop())
 
@@ -80,6 +169,10 @@ class TerminalClient(discord.Client):
             print(f"\r{prefix}: {content}{attachments}{embeds}")
             print(_c(">>> ", _YELLOW), end="", flush=True)
 
+    # -----------------------------------------------------------------------
+    # Input loop
+    # -----------------------------------------------------------------------
+
     async def _input_loop(self):
         loop = asyncio.get_running_loop()
         print(_c(">>> ", _YELLOW), end="", flush=True)
@@ -98,12 +191,20 @@ class TerminalClient(discord.Client):
 
             await self._handle_command(line)
 
-    async def _handle_command(self, line: str):
-        parts = line.split(None, 2)
-        cmd   = parts[0].lower()
+    # -----------------------------------------------------------------------
+    # Command dispatcher
+    # -----------------------------------------------------------------------
 
-        if cmd in ("/watch", "/sw"):
-            await self._cmd_watch(parts)
+    async def _handle_command(self, line: str):
+        parts = line.split(None, 1)
+        cmd   = parts[0].lower()
+        rest  = parts[1] if len(parts) > 1 else ""
+
+        if cmd == "/t":
+            await self._cmd_bot_passthrough(rest)
+
+        elif cmd in ("/watch", "/sw"):
+            await self._cmd_watch(line.split(None, 2))
 
         elif cmd == "/unwatch":
             if self.watched_channel:
@@ -113,13 +214,13 @@ class TerminalClient(discord.Client):
                 print(_c("  ⚠️  Not watching any channel.", _YELLOW))
 
         elif cmd == "/send":
-            await self._cmd_send(parts)
+            await self._cmd_send(line.split(None, 2))
 
         elif cmd == "/dm":
-            await self._cmd_dm(parts)
+            await self._cmd_dm(line.split(None, 2))
 
         elif cmd == "/join":
-            await self._cmd_join(parts)
+            await self._cmd_join(line.split(None, 2))
 
         elif cmd == "/leave":
             await self._cmd_leave()
@@ -128,10 +229,10 @@ class TerminalClient(discord.Client):
             self._cmd_vc()
 
         elif cmd == "/tts":
-            await self._cmd_tts(parts)
+            await self._cmd_tts(line.split(None, 1))
 
         elif cmd == "/voice":
-            await self._cmd_set_voice(parts)
+            await self._cmd_set_voice(line.split(None, 1))
 
         elif cmd == "/voices":
             await self._cmd_voices()
@@ -141,6 +242,9 @@ class TerminalClient(discord.Client):
 
         elif cmd == "/guilds":
             self._cmd_guilds()
+
+        elif cmd in ("/help", "/?"):
+            print(_TORIE_COMMANDS)
 
         elif cmd in ("/quit", "/exit", "/q"):
             await self._quit()
@@ -153,16 +257,83 @@ class TerminalClient(discord.Client):
                 except discord.Forbidden:
                     print(_c("  ❌ No permission to send in that channel.", _RED))
             else:
-                print(_c(f"  ❓ Unknown command: {cmd}  (use /watch first to send bare text)", _YELLOW))
+                print(_c(
+                    f"  ❓ Unknown command: {cmd}  "
+                    "(use /watch first to send bare text, or /help for all commands)",
+                    _YELLOW
+                ))
 
         print(_c(">>> ", _YELLOW), end="", flush=True)
+
+    # -----------------------------------------------------------------------
+    # /t  — bot command passthrough
+    # -----------------------------------------------------------------------
+
+    async def _cmd_bot_passthrough(self, rest: str):
+        """
+        Translate /t <subcommand> into the matching t! or @mention bot command
+        and send it to the watched channel so the bot processes it normally.
+
+        Supported sub-commands mirror everything in commands.py:
+          ping · whoami · greet · family · purge
+          mute · unmute · warn · warns
+          filter (add/remove/list/clear)
+          perm (add/remove/list)
+          birthday / bday (add/remove/list/today)
+          personality / persona (add/remove/list/clear)
+          memory / mem (view/add/remove/clear/delete/list)
+          hug · kiss · pat · bite · lick · punch · kick · fuck · tor
+        """
+        if not self.watched_channel:
+            print(_c("  ⚠️  Use /watch <channel> first.", _YELLOW))
+            return
+
+        if not rest:
+            print(_c("  Usage: /t <bot-command> [args]  — type /help to see all", _YELLOW))
+            return
+
+        parts    = rest.split(None, 1)
+        sub      = parts[0].lower()
+        sub_rest = parts[1] if len(parts) > 1 else ""
+
+        # Commands that use t! prefix
+        PREFIX_CMDS = {
+            "ping", "whoami", "greet", "family", "purge",
+            "warns", "filter", "perm", "birthday", "bday",
+            "personality", "persona", "memory", "mem",
+            "hug", "kiss", "pat", "bite", "lick", "punch", "kick", "fuck",
+            "tor",
+        }
+
+        MENTION_CMDS = {"mute", "unmute", "warn"}
+
+        if sub in PREFIX_CMDS:
+            bot_msg = f"t!{sub} {sub_rest}".strip()
+        elif sub in MENTION_CMDS:
+            bot_user = self.user
+            bot_msg  = f"<@{bot_user.id}> {sub} {sub_rest}".strip()
+        else:
+            print(_c(f"  ❓ Unknown bot sub-command: {sub}  (type /help to see all)", _YELLOW))
+            return
+
+        try:
+            await self.watched_channel.send(bot_msg)
+            print(_c(f"  📨 Sent: {bot_msg}", _GREY))
+        except discord.Forbidden:
+            print(_c("  ❌ No permission to send in that channel.", _RED))
+        except Exception as e:
+            print(_c(f"  ❌ Error: {e}", _RED))
+
+    # -----------------------------------------------------------------------
+    # Terminal-native commands
+    # -----------------------------------------------------------------------
 
     async def _cmd_watch(self, parts: list):
         if len(parts) < 2:
             print(_c("  Usage: /watch <#channel-name or channel_id>", _YELLOW))
             return
 
-        target = parts[1].lstrip("#").strip()
+        target  = parts[1].lstrip("#").strip()
         channel = self._resolve_channel(target)
 
         if not channel:
@@ -171,9 +342,8 @@ class TerminalClient(discord.Client):
 
         self.watched_channel = channel
         print(_c(f"  👀 Now watching #{channel.name} in {channel.guild.name}", _GREEN))
-        print(_c(f"     Messages will appear here. Type text directly to reply.", _GREY))
+        print(_c(f"     Type bare text to send. Use /t <cmd> to run bot commands.", _GREY))
 
-        # Show last 5 messages as context
         try:
             history = [m async for m in channel.history(limit=5)]
             history.reverse()
@@ -234,9 +404,9 @@ class TerminalClient(discord.Client):
             for ch in guild.text_channels:
                 perms = ch.permissions_for(guild.me)
                 flags = []
-                if perms.read_messages:  flags.append(_c("read",  _GREEN))
-                if perms.send_messages:  flags.append(_c("send",  _BLUE))
-                if not flags:            flags.append(_c("no access", _GREY))
+                if perms.read_messages: flags.append(_c("read", _GREEN))
+                if perms.send_messages: flags.append(_c("send", _BLUE))
+                if not flags:           flags.append(_c("no access", _GREY))
                 print(f"    #{ch.name:<30} {ch.id}  [{', '.join(flags)}]")
 
     def _cmd_guilds(self):
@@ -300,7 +470,7 @@ class TerminalClient(discord.Client):
                     self._voice_client.is_connected() and
                     self._voice_client.channel.id == ch.id
                 ) else ""
-                can_join = _c("connect", _BLUE) if perms.connect else _c("no access", _GREY)
+                can_join  = _c("connect", _BLUE) if perms.connect else _c("no access", _GREY)
                 occupants = _c(f"  [{', '.join(members)}]", _CYAN) if members else _c("  [empty]", _GREY)
                 print(f"    🔊 {ch.name:<30} {ch.id}  [{can_join}]{occupants}{joined}")
 
@@ -317,7 +487,7 @@ class TerminalClient(discord.Client):
             print(_c("  ⚠️  Not in a voice channel. Use /join first.", _YELLOW))
             return
 
-        text = parts[1] if len(parts) == 2 else " ".join(parts[1:])
+        text = parts[1]
 
         if self._voice_client.is_playing():
             self._voice_client.stop()
@@ -384,16 +554,14 @@ class TerminalClient(discord.Client):
             print(_c(f"  ❌ Could not fetch voice list: {e}", _RED))
             return
 
-        # Group by locale for readability
         grouped: dict[str, list] = {}
         for v in voices:
             locale = v["Locale"]
             grouped.setdefault(locale, []).append(v["ShortName"])
 
-        # Highlight English locales first, rest alphabetically
-        en_locales  = sorted(k for k in grouped if k.startswith("en-"))
-        other       = sorted(k for k in grouped if not k.startswith("en-"))
-        ordered     = en_locales + other
+        en_locales = sorted(k for k in grouped if k.startswith("en-"))
+        other      = sorted(k for k in grouped if not k.startswith("en-"))
+        ordered    = en_locales + other
 
         print(_c(f"\n  {len(voices)} voices available  (current: {self._tts_voice})", _CYAN))
         for locale in ordered:
@@ -403,6 +571,10 @@ class TerminalClient(discord.Client):
                 active = _c(" ◄", _GREEN) if n == self._tts_voice else ""
                 print(f"{label} {n}{active}")
         print()
+
+    # -----------------------------------------------------------------------
+    # Resolvers
+    # -----------------------------------------------------------------------
 
     def _resolve_voice_channel(self, target: str) -> discord.VoiceChannel | None:
         if target.isdigit():
@@ -416,11 +588,9 @@ class TerminalClient(discord.Client):
         return None
 
     def _resolve_channel(self, target: str) -> discord.TextChannel | None:
-        # Try by ID first
         if target.isdigit():
             ch = self.get_channel(int(target))
             return ch if isinstance(ch, discord.TextChannel) else None
-        # Try by name across all guilds
         target_lower = target.lower()
         for guild in self.guilds:
             for ch in guild.text_channels:
@@ -429,13 +599,11 @@ class TerminalClient(discord.Client):
         return None
 
     async def _resolve_user(self, target: str) -> discord.User | None:
-        # By ID
         if target.isdigit():
             try:
                 return await self.fetch_user(int(target))
             except discord.NotFound:
                 return None
-        # By username across all cached members
         target_lower = target.lower()
         for guild in self.guilds:
             async for member in guild.fetch_members(limit=None):

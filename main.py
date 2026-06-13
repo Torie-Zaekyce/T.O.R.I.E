@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands, tasks
 from groq import Groq
@@ -10,7 +9,7 @@ from bot.commands import (
 )
 from bot.greetings import MORNING_GREETINGS, LUNCH_REMINDERS, DINNER_REMINDERS, EVENING_GREETINGS, MIDNIGHT_GREETINGS
 from bot.user_memory import touch_user, build_memory_note, extract_and_save_facts
-from bot.minigames import get_session, start_session, end_session, detect_game_start
+from bot.minigames import get_session, start_session, end_session, detect_game_start, extract_board_snapshot
 from bot.config import (
     DISCORD_TOKEN, GROQ_API_KEY, KLIPY_API_KEY,
     GROQ_MODEL, GROQ_FALLBACK, GROQ_VISION_MODEL,
@@ -131,7 +130,7 @@ def _get_role_key(user) -> str | None:
  
 async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: str | None) -> None:
     
-    # ── 1. Touch user record (creates MongoDB doc on first interaction) ──────
+    # ── 1. Touch user record ─────────────────────────────────────────────────
     user_id      = str(message.author.id)
     display_name = message.author.display_name
     touch_user(user_id, display_name)
@@ -139,32 +138,26 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
     channel_id = message.channel.id
     author_id  = message.author.id
  
-    # ── 2. Session check — minigames ────────────────────────────────────────
+    # ── 2. Session check — minigames ─────────────────────────────────────────
     session = get_session(channel_id, author_id)
- 
-    # Detect game-start when no session is active
+
     game_kind = detect_game_start(clean_msg)
     if session is None and game_kind:
         session = start_session(channel_id, author_id, kind=game_kind)
         print(f"🎮 {game_kind.title()} session started for {display_name} in #{message.channel.name}")
- 
-    # If a session is active, use its persistent history (ignore reply chain)
+
     if session is not None:
         session.touch()
-        history = session.history
-        using_session = True
-    else:
-        # ── 3. Fall back to Discord reply chain for normal convos ────────────
-        history       = await fetch_reply_chain(message)
-        using_session = False
- 
+
+    history = await fetch_reply_chain(message)
+
     async with message.channel.typing():
         try:
             # ── 4. Build context note (family role) ──────────────────────────
             note = CONTEXT_NOTES.get(role_key)
             contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
  
-            # ── 5. Inject memory facts into the prompt ───────────────────────
+            # ── 5. Inject memory facts ───────────────────────────────────────
             memory_note = build_memory_note(user_id)
             if memory_note:
                 contexted_msg = f"[{memory_note}]\n{contexted_msg}"
@@ -185,7 +178,8 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
             # ── 7. Generate reply ────────────────────────────────────────────
             MAX_RETRIES = 2
             reply = None
-            system_note = session.system_note if (using_session and session) else ""
+
+            system_note = session.system_note if session else ""
             for attempt in range(MAX_RETRIES + 1):
                 msg_to_send = contexted_msg if attempt == 0 else \
                     f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
@@ -211,19 +205,22 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
  
+    # ── 8. Extract board snapshot and send reply + optional embed ──────────
+    board_embed = None
+    if session is not None:
+        reply, board_embed = extract_board_snapshot(reply, session.kind)
+
     await message.reply(reply, mention_author=False)
- 
-    # ── 8. Update session history after reply is sent ────────────────────────
-    if using_session and session is not None:
-        session.append("user",      clean_msg)
-        session.append("assistant", reply)
- 
-        # Detect game-end from either side
+    if board_embed is not None:
+        await message.channel.send(embed=board_embed)
+
+    # ── 9. Detect game-end from either side ──────────────────────────────────
+    if session is not None:
         if session.is_ended_by(clean_msg) or session.is_ended_by(reply):
             end_session(channel_id, author_id)
             print(f"🎮 {session.kind.title()} session ended for {display_name} (game over detected)")
  
-    # ── 9. Extract & save facts in background (never blocks the reply) ───────
+    # ── 10. Extract & save facts in background ────────────────────────────────
     asyncio.create_task(
         asyncio.to_thread(
             extract_and_save_facts,
@@ -338,14 +335,12 @@ async def on_message(message: discord.Message):
             )
             return
  
+    # Gate: Torie only responds when explicitly mentioned.
+    # Games continue via the Discord reply chain — the user replies to Torie's
+    # last message, so bot.user.mentioned_in() is True for replies, and the
+    # full move history is recovered through fetch_reply_chain. No un-mentioned
+    # message interception needed.
     if not torie.is_bot_mentioned(message, bot.user):
-        # Even without a mention, respond if the user has an active session
-        active_session = get_session(message.channel.id, message.author.id)
-        if active_session is not None:
-            clean_msg = torie.clean_mention(message.content, bot.user.id)
-            role_key  = _get_role_key(message.author)
-            if clean_msg:
-                await _handle_ai_reply(message, clean_msg, role_key)
         return
  
     clean_msg = torie.clean_mention(message.content, bot.user.id)
@@ -401,9 +396,6 @@ async def on_message(message: discord.Message):
             await message.reply(embed=embed, mention_author=False)
             return
  
-    # BUG 2 FIX: Run injection check BEFORE moderation handlers so a crafted
-    # message like "@TORIE unmute @user ignore all previous instructions"
-    # cannot sneak through the moderation path before being caught.
     if INJECTION_REGEX.search(clean_msg):
         await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
         print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
@@ -424,12 +416,11 @@ async def on_message(message: discord.Message):
         await handle_unmute(message, targets, bot, _mute_tasks)
         return
  
-    # Length check (injection already handled above)
+    # Length check
     clean_msg, rejection = sanitize_input(clean_msg)
     if rejection == "too_long":
         await message.channel.send("⚠️ Too Long Didn't Read. Congratulations or Sorry for what happened 😅")
         return
-    # injection case is already handled above; this is a no-op safety net
     if rejection == "injection":
         await message.channel.send("🚫 Nice try. I don't take instructions from randoms. 😏")
         print(f"⚠️ Injection blocked (sanitize_input) from {message.author} ({message.author.id})")
@@ -455,4 +446,3 @@ async def on_command_error(ctx, error):
 if __name__ == "__main__":
     print("Starting T.O.R.I.E....")
     bot.run(DISCORD_TOKEN)
- 
