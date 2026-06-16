@@ -38,7 +38,6 @@ BROTHER_IN_LAW = {
     "broinlaw_haru": {"username": "Haru", "id": 800304284541124638, "title": "Brother in Law", "role": "In Law"},
 }
 
-# Flat lookups built once at startup
 _ID_TO_ROLE:   dict[int, str] = {}
 _NAME_TO_ROLE: dict[str, str] = {}
 for _group in (PARENTS, COUSIN, UNCLE, SISTER, BROTHER_IN_LAW):
@@ -430,6 +429,12 @@ def setup_commands(bot: commands.Bot):
             "`t!memory remove @user <number>` — Remove a memory *(parents only)*\n"
             "`t!memory clear @user` — Wipe all memories *(parents only)*\n"
             "`t!memory list` — See all remembered users *(parents only)*"
+        ))
+        embed.add_field(name="🎮 Minigames", inline=False, value=(
+            "`@T.O.R.I.E. let's play chess` — Start a chess game\n"
+            "`@T.O.R.I.E. tic tac toe` — Start Tic Tac Toe\n"
+            "`@T.O.R.I.E. battleship` — Start Battleship\n"
+            "`t!board` — Show the current game board"
         ))
         embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
         await ctx.send(embed=embed)
@@ -842,6 +847,34 @@ def setup_commands(bot: commands.Bot):
         except Exception as e:
             print(f"❌ Purge error: {e}")
 
+    @bot.command(name="board")
+    async def board_cmd(ctx):
+        from bot.minigames import get_session, extract_board_snapshot, _BOARD_RE, _TTT_RE, _BSHIP_RE
+        session = get_session(ctx.channel.id, ctx.author.id)
+        if session is None:
+            await ctx.send(embed=discord.Embed(
+                description="❌ You don't have an active game session. Start one by mentioning me!",
+                color=discord.Color.red()
+            ))
+            return
+        pattern = {"chess": _BOARD_RE, "tictactoe": _TTT_RE, "battleship": _BSHIP_RE}.get(session.kind)
+        if pattern is None:
+            await ctx.send("❓ Unknown game type."); return
+        board_embed = None
+        async for msg in ctx.channel.history(limit=40):
+            if msg.author == bot.user and pattern.search(msg.content):
+                _, board_embed = extract_board_snapshot(msg.content, session.kind)
+                if board_embed:
+                    break
+        if board_embed is None:
+            await ctx.send(embed=discord.Embed(
+                description="⚠️ No board snapshot found yet. Make a move first!",
+                color=discord.Color.orange()
+            ))
+            return
+        board_embed.set_footer(text=f"t!board — {session.kind.title()} • {ctx.author.display_name}")
+        await ctx.send(embed=board_embed)
+
     @bot.tree.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
     @discord.app_commands.describe(
         channel    = "The channel to send to",
@@ -996,6 +1029,7 @@ def setup_commands(bot: commands.Bot):
             ),
             color = discord.Color.blurple()
         ))
+
     @memory_group.command(name="view")
     async def memory_view(ctx, member: discord.Member = None):
         target = member or ctx.author
