@@ -6,6 +6,8 @@
 
 import asyncio
 import re
+import discord
+
 
 # ---------------------------------------------------------------------------
 # Session config
@@ -138,3 +140,58 @@ def detect_game_start(text: str) -> str | None:
         if game["start"].search(text):
             return kind
     return None
+
+_BOARD_RE = re.compile(r"<<BOARD>>(.*?)<</BOARD>>", re.DOTALL)
+_TTT_RE   = re.compile(r"<<TTT>>([XO.]{9})<</TTT>>", re.IGNORECASE)
+_BSHIP_RE = re.compile(r"<<BSHIP>>(.*?)<</BSHIP>>", re.DOTALL)
+
+def extract_board_snapshot(reply: str, kind: str) -> tuple[str, discord.Embed | None]:
+    if kind == "chess":
+        m = _BOARD_RE.search(reply)
+        if not m:
+            return reply, None
+        clean = _BOARD_RE.sub("", reply).strip()
+        embed = discord.Embed(
+            title       = "♟️ Chess Board",
+            description = f"```\n{m.group(1).strip()}\n```",
+            color       = discord.Color.from_rgb(210, 180, 140),
+        )
+        return clean, embed
+
+    if kind == "tictactoe":
+        m = _TTT_RE.search(reply)
+        if not m:
+            return reply, None
+        cells     = list(m.group(1).upper())
+        clean     = _TTT_RE.sub("", reply).strip()
+        emoji_map = {"X": "❌", "O": "⭕", ".": "⬜"}
+        rows = [
+            "".join(emoji_map.get(cells[i + j], "⬜") for j in range(3))
+            for i in range(0, 9, 3)
+        ]
+        embed = discord.Embed(
+            title       = "🎮 Tic Tac Toe",
+            description = "\n".join(rows) + "\n\nPositions: 1️⃣2️⃣3️⃣ / 4️⃣5️⃣6️⃣ / 7️⃣8️⃣9️⃣",
+            color       = discord.Color.blurple(),
+        )
+        return clean, embed
+
+    if kind == "battleship":
+        m = _BSHIP_RE.search(reply)
+        if not m:
+            return reply, None
+        raw_rows = [l for l in m.group(1).strip().splitlines() if l.strip()][:10]
+        clean    = _BSHIP_RE.sub("", reply).strip()
+        emoji_map = {"~": "🌊", "H": "💥", "M": "⬜", "S": "🚢"}
+        lines = ["🔵 A  B  C  D  E  F  G  H  I  J"]
+        for i, row in enumerate(raw_rows, 1):
+            cells = "".join(emoji_map.get(c.upper(), "🌊") for c in row[:10])
+            lines.append(f"`{i:02}` {cells}")
+        embed = discord.Embed(
+            title       = "🚢 Battleship — Your Tracking Grid",
+            description = "\n".join(lines),
+            color       = discord.Color.dark_blue(),
+        )
+        return clean, embed
+
+    return reply, None
