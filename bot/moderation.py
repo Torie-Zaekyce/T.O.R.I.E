@@ -2,7 +2,8 @@ import asyncio
 import re
 import discord
 from discord.ext import commands
-from bot.commands import has_permission, add_warn
+from bot.perms import has_permission
+from bot.db import add_warn
 from bot.utils import fmt_duration
 from bot.config import MUTED_ROLE_ID, MUTED_CHANNEL_ID, GENERAL_CHANNEL
 
