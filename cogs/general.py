@@ -40,72 +40,126 @@ _GREET_RESPONSES = {
 }
 
 
+_HELP_SECTIONS = [
+    ("🤖 General", (
+        "`t!ping` — Check if I'm alive + latency\n"
+        "`t!whoami` — Find out who you are to me\n"
+        "`t!greet` — Get a personalized greeting\n"
+        "`t!family` — See my whole family\n"
+        "`t!purge <1-100>` — Delete recent messages *(perm: purge)*"
+    )),
+    ("🚫 Moderation", (
+        "`t!filter add/remove/list/clear <word>` — Word filter *(perm: filter)*\n"
+        "`@T.O.R.I.E. mute @user 10m` — Mute a user *(perm: mute)*\n"
+        "`@T.O.R.I.E. unmute @user` — Unmute *(perm: unmute)*\n"
+        "`@T.O.R.I.E. warn @user [reason]` — Warn + auto-mute 10min *(perm: warn)*\n"
+        "`t!warns @user` — Check warn history\n"
+        "`t!warns @user clear` — Clear warns *(perm: warn)*\n"
+        "`/sendmsg #channel <message> [attachment] [reply_to]` — Send a message *(perm: sendmsg)*"
+    )),
+    ("🔑 Permissions", (
+        "`t!perm add @user <perm>` — Grant a permission *(parents only)*\n"
+        "`t!perm remove @user <perm>` — Revoke a permission *(parents only)*\n"
+        "`t!perm list [@user]` — View permissions\n"
+        "Perms: `mute` `unmute` `filter` `personality` `purge` `sendmsg` `warn` `mod`"
+    )),
+    ("💬 Chat!", (
+        "`@T.O.R.I.E. <message>` — Talk to me!\n"
+        "`@T.O.R.I.E. hug/kiss/pat/bite/lick @user` — Miku GIF interaction 🎵\n"
+        "`@T.O.R.I.E. + image` — React to an image\n"
+        "`@T.O.R.I.E. advice on <topic>` — Get genuine advice"
+    )),
+    ("🔊 Voice", (
+        "`t!join` — Join your voice channel\n"
+        "`t!leave` — Leave the voice channel\n"
+        "`t!say <text>` — Speak text out loud via TTS"
+    )),
+    ("🎂 Birthdays", (
+        "`t!birthday add <MM-DD>` — Register your birthday 🎉\n"
+        "`t!birthday remove` — Remove your birthday\n"
+        "`t!birthday list` — See everyone's birthdays\n"
+        "`t!birthday today` — Check today's birthdays"
+    )),
+    ("🧠 Personality", (
+        "`t!personality add <trait>` — Add a trait *(perm: personality)*\n"
+        "`t!personality remove <number>` — Remove a trait *(perm: personality)*\n"
+        "`t!personality list` — See active traits\n"
+        "`t!personality clear` — Clear all traits *(perm: personality)*"
+    )),
+    ("🧠 Memory", (
+        "`t!memory view [@user]` — See what T.O.R.I.E. remembers about you\n"
+        "`t!memory add @user <fact>` — Manually add a memory *(parents only)*\n"
+        "`t!memory remove @user <number>` — Remove a memory *(parents only)*\n"
+        "`t!memory clear @user` — Wipe all memories *(parents only)*\n"
+        "`t!memory list` — See all remembered users *(parents only)*"
+    )),
+    ("🎮 Minigames", (
+        "`@T.O.R.I.E. let's play chess` — Start a chess game\n"
+        "`@T.O.R.I.E. tic tac toe` — Start Tic Tac Toe\n"
+        "`@T.O.R.I.E. battleship` — Start Battleship\n"
+        "`t!board` — Show the current game board"
+    )),
+]
+
+
+class HelpPagerView(discord.ui.View):
+    def __init__(self, author: discord.abc.User):
+        super().__init__(timeout=60)
+        self.author  = author
+        self.page    = 0
+        self.message = None
+        self.update_buttons()
+
+    def build_embed(self) -> discord.Embed:
+        name, value = _HELP_SECTIONS[self.page]
+        embed = discord.Embed(
+            title       = f"📖 T.O.R.I.E. Command List — {name}",
+            description = "Mention me or use the `t!` prefix.",
+            color       = discord.Color.blurple()
+        )
+        embed.add_field(name=name, value=value, inline=False)
+        embed.set_footer(text=f"Page {self.page + 1} of {len(_HELP_SECTIONS)} • T.O.R.I.E.")
+        return embed
+
+    def update_buttons(self):
+        self.prev_btn.disabled = self.page == 0
+        self.next_btn.disabled = self.page >= len(_HELP_SECTIONS) - 1
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.author:
+            await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
+            return
+        self.page -= 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.author:
+            await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
+            return
+        self.page += 1
+        self.update_buttons()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            pass
+
+
 class GeneralCog(commands.Cog, name="General"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command(name="help")
     async def help_command(self, ctx):
-        embed = discord.Embed(
-            title       = "📖 T.O.R.I.E. Command List",
-            description = "Here's everything I can do! Mention me or use `t!` prefix.",
-            color       = discord.Color.blurple()
-        )
-        embed.add_field(name="🤖 General", inline=False, value=(
-            "`t!ping` — Check if I'm alive + latency\n"
-            "`t!whoami` — Find out who you are to me\n"
-            "`t!greet` — Get a personalized greeting\n"
-            "`t!family` — See my whole family\n"
-            "`t!purge <1-100>` — Delete recent messages *(perm: purge)*"
-        ))
-        embed.add_field(name="🚫 Moderation", inline=False, value=(
-            "`t!filter add/remove/list/clear <word>` — Word filter *(perm: filter)*\n"
-            "`@T.O.R.I.E. mute @user 10m` — Mute a user *(perm: mute)*\n"
-            "`@T.O.R.I.E. unmute @user` — Unmute *(perm: unmute)*\n"
-            "`@T.O.R.I.E. warn @user [reason]` — Warn + auto-mute 10min *(perm: warn)*\n"
-            "`t!warns @user` — Check warn history\n"
-            "`t!warns @user clear` — Clear warns *(perm: warn)*\n"
-            "`/sendmsg #channel <message> [attachment] [reply_to]` — Send a message *(perm: sendmsg)*"
-        ))
-        embed.add_field(name="🔑 Permissions", inline=False, value=(
-            "`t!perm add @user <perm>` — Grant a permission *(parents only)*\n"
-            "`t!perm remove @user <perm>` — Revoke a permission *(parents only)*\n"
-            "`t!perm list [@user]` — View permissions\n"
-            "Perms: `mute` `unmute` `filter` `personality` `purge` `sendmsg` `warn` `mod`"
-        ))
-        embed.add_field(name="💬 Chat!", inline=False, value=(
-            "`@T.O.R.I.E. <message>` — Talk to me!\n"
-            "`@T.O.R.I.E. hug/kiss/pat/bite/lick @user` — Miku GIF interaction 🎵\n"
-            "`@T.O.R.I.E. + image` — React to an image\n"
-            "`@T.O.R.I.E. advice on <topic>` — Get genuine advice"
-        ))
-        embed.add_field(name="🎂 Birthdays", inline=False, value=(
-            "`t!birthday add <MM-DD>` — Register your birthday 🎉\n"
-            "`t!birthday remove` — Remove your birthday\n"
-            "`t!birthday list` — See everyone's birthdays\n"
-            "`t!birthday today` — Check today's birthdays"
-        ))
-        embed.add_field(name="🧠 Personality", inline=False, value=(
-            "`t!personality add <trait>` — Add a trait *(perm: personality)*\n"
-            "`t!personality remove <number>` — Remove a trait *(perm: personality)*\n"
-            "`t!personality list` — See active traits\n"
-            "`t!personality clear` — Clear all traits *(perm: personality)*"
-        ))
-        embed.add_field(name="🧠 Memory", inline=False, value=(
-            "`t!memory view [@user]` — See what T.O.R.I.E. remembers about you\n"
-            "`t!memory add @user <fact>` — Manually add a memory *(parents only)*\n"
-            "`t!memory remove @user <number>` — Remove a memory *(parents only)*\n"
-            "`t!memory clear @user` — Wipe all memories *(parents only)*\n"
-            "`t!memory list` — See all remembered users *(parents only)*"
-        ))
-        embed.add_field(name="🎮 Minigames", inline=False, value=(
-            "`@T.O.R.I.E. let's play chess` — Start a chess game\n"
-            "`@T.O.R.I.E. tic tac toe` — Start Tic Tac Toe\n"
-            "`@T.O.R.I.E. battleship` — Start Battleship\n"
-            "`t!board` — Show the current game board"
-        ))
-        embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
-        await ctx.send(embed=embed)
+        view = HelpPagerView(ctx.author)
+        view.message = await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="ping")
     async def ping(self, ctx):
