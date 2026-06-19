@@ -13,6 +13,7 @@ COGS = [
     "cogs.permissions",
     "cogs.memory",
     "cogs.interactions",
+    "cogs.voice",
 ]
 
 
