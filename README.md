@@ -3,7 +3,7 @@
 
 > A personal Discord bot built with love, dad jokes, and a concerning amount of sarcasm.
 
-T.O.R.I.E. is a feature-rich Discord bot designed for a private server. She chats with AI, plays music, manages birthdays, moderates members, sends Klipy GIFs, and knows exactly who her family is — and acts accordingly.
+T.O.R.I.E. is a feature-rich Discord bot designed for a private server. She chats with AI, manages birthdays, moderates members, sends Klipy GIFs, remembers facts about people, plays minigames, and knows exactly who her family is — and acts accordingly.
 
 ---
 
@@ -31,6 +31,12 @@ No hardcoded moderators (except parents who always have `mod`). Grant any user s
 ### 📅 Scheduled Announcements
 Automatic messages at 7AM, 12PM, 7PM, 7:30PM, and midnight PHT — morning greetings, lunch reminders, dinner reminders, evening check-ins, and midnight chaos.
 
+### 🧠 Memory
+T.O.R.I.E. quietly remembers facts about people from conversation — likes, dislikes, running jokes — and brings them up naturally later. Parents can view, add, remove, or wipe anyone's stored memory with `t!memory`.
+
+### 🎮 Minigames
+Start a quick game by mentioning her — chess (with a basic AI opponent), tic-tac-toe, or battleship. Game state is stored in MongoDB so sessions survive restarts. Check the current board anytime with `t!board`.
+
 ### 📨 Anonymous Messaging
 `/sendmsg #channel message` — T.O.R.I.E. sends the message from her account. Only you see the confirmation. Useful for announcements without revealing who sent them.
 
@@ -44,10 +50,9 @@ Automatic messages at 7AM, 12PM, 7PM, 7:30PM, and midnight PHT — morning greet
 | Discord | discord.py 2.x |
 | AI | Groq API (LLaMA 3.3 70B + LLaMA 3.1 8B fallback) |
 | Vision | Groq Vision (Llama 4 Scout) |
-| Music | ⚠️ **DEPRECATED** — yt-dlp + Spotify API + Deezer (not maintained) |
 | Database | MongoDB Atlas (M0 free tier) |
 | GIFs | Klipy GIF API |
-| Hosting | Railway (chat) + Oracle VPS (music) |
+| Hosting | Railway |
 
 ---
 
@@ -60,18 +65,31 @@ T.O.R.I.E./
 │
 ├── bot/
 │   ├── __init__.py
-│   ├── commands.py          ← all prefix + slash commands (~1200 lines)
-│   ├── config.py            ← centralized constants, API keys, channel IDs
-│   ├── utils.py             ← helper functions (parse_duration, sanitize_input, fetch_reply_chain)
-│   ├── moderation.py        ← moderation handlers (warn, mute, unmute, auto-unmute)
-│   ├── personality.py       ← AI personality, system prompt, custom traits
-│   ├── user_memory.py       ← MongoDB user memory and fact extraction
-│   ├── greetings.py         ← scheduled message pools
-│   ├── minigames.py         ← game commands
-│   └── music.py             ← ⚠️ DEPRECATED — music system (not maintained)
+│   ├── cog_loader.py         ← loads all cogs on startup
+│   ├── family.py             ← family role data + lookup helpers
+│   ├── perms.py               ← permission checks + family default perms
+│   ├── db.py                 ← MongoDB singleton + all collection CRUD
+│   ├── word_filter.py         ← word filter normalization, cache, detection
+│   ├── config.py              ← centralized constants, API keys, channel IDs
+│   ├── utils.py                ← helper functions (parse_duration, sanitize_input, fetch_reply_chain)
+│   ├── moderation.py            ← moderation handlers (warn, mute, unmute, auto-unmute)
+│   ├── personality.py            ← AI personality, system prompt, custom traits
+│   ├── user_memory.py             ← MongoDB user memory and fact extraction
+│   ├── greetings.py                ← scheduled message pools
+│   └── minigames.py                 ← chess / tic-tac-toe / battleship session logic
 │
-├── .env                     ← local secrets (never commit)
-├── .env.example             ← key template
+├── cogs/
+│   ├── __init__.py
+│   ├── general.py             ← t!help, t!ping, t!whoami, t!greet, t!family
+│   ├── moderation.py            ← t!filter, t!warns, t!purge, /sendmsg
+│   ├── birthday.py               ← t!birthday (add / remove / list / today)
+│   ├── personality.py             ← t!personality (add / remove / list / clear)
+│   ├── permissions.py              ← t!perm (add / remove / list)
+│   ├── memory.py                    ← t!memory (view / add / remove / clear / delete / list)
+│   └── interactions.py               ← GIF interactions, t!tor, t!board
+│
+├── .env                      ← local secrets (never commit)
+├── .env.example              ← key template
 ├── .gitignore
 ├── requirements.txt
 ├── Procfile
@@ -80,13 +98,19 @@ T.O.R.I.E./
 
 ### Architecture Notes
 
-**Modular Design:** The codebase is organized into single-responsibility modules:
-- **config.py** — All constants, channel IDs, model names, and regex patterns compiled at import time for performance
-- **utils.py** — Reusable functions for text processing, duration parsing, and Discord context handling
-- **moderation.py** — Self-contained moderation logic with embed creation and role management
-- **commands.py** — All user-facing commands (prefix, slash, interactions)
-- **personality.py** — AI personality system with advice detection and custom traits
-- **user_memory.py** — MongoDB integration for persistent user facts and memory extraction
+**Cog-based design:** Commands are split into single-responsibility cogs under `cogs/`, loaded dynamically at startup via `bot/cog_loader.py`. Shared logic (family data, permissions, database access, word filtering) lives in `bot/` so every cog pulls from the same source of truth instead of duplicating it.
+
+- **bot/family.py** — Family role dictionaries and `get_role()` lookup helpers
+- **bot/perms.py** — `has_permission()` checks, valid permission list, family default perm table
+- **bot/db.py** — Single MongoDB client + every collection's CRUD functions (birthdays, warns, perms, filter words)
+- **bot/word_filter.py** — Leet-speak normalization, filtered word cache, detection logic
+- **bot/config.py** — All constants, channel IDs, model names, and regex patterns compiled at import time for performance
+- **bot/utils.py** — Reusable functions for text processing, duration parsing, and Discord context handling
+- **bot/moderation.py** — Self-contained moderation logic with embed creation and role management
+- **bot/personality.py** — AI personality system with advice detection and custom traits
+- **bot/user_memory.py** — MongoDB integration for persistent user facts and memory extraction
+- **bot/minigames.py** — Game session state and board rendering for chess, tic-tac-toe, and battleship
+- **cogs/** — All user-facing commands (prefix, slash, interactions), one cog per concern
 
 **Performance Optimizations:**
 - Regex patterns compiled at module load time (not on every function call)
@@ -117,8 +141,6 @@ DISCORD_TOKEN=        # Bot token from discord.com/developers
 GROQ_API_KEY=         # From console.groq.com
 MONGODB_URI=          # From MongoDB Atlas → Connect → Drivers
 KLIPY_API_KEY=        # From klipy.com/developers (free)
-SPOTIFY_CLIENT_ID=    # From developer.spotify.com
-SPOTIFY_CLIENT_SECRET=
 ```
 
 ### 4. MongoDB Atlas setup
@@ -134,6 +156,7 @@ T.O.R.I.E. will auto-create these collections inside a `torie` database:
 | `warns` | User warning history |
 | `permissions` | Custom permission grants |
 | `user_memory` | User facts and interaction history |
+| `game_sessions` | Active/recent minigame board state |
 
 ### 5. Run locally
 ```bash
@@ -163,6 +186,8 @@ python main.py
 | `@T.O.R.I.E. hug/kiss/pat @user` | GIF interaction via mention |
 | `t!hug/kiss/pat/bite/lick/punch/kick @user` | GIF interaction via command |
 | `tor hug @user` | Prefix-free shortcut |
+| `@T.O.R.I.E. let's play chess / tic tac toe / battleship` | Start a minigame |
+| `t!board` | Show the current game board |
 
 ### 🚫 Moderation
 | Command | Description | Permission |
@@ -206,27 +231,21 @@ Family members have default permissions without needing a grant — parents have
 | `t!personality list` | View active traits | anyone |
 | `t!personality clear` | Clear all traits | `personality` |
 
+### 🧠 Memory
+| Command | Description | Permission |
+|---|---|---|
+| `t!memory view [@user]` | View memories for yourself or a user | anyone (own); parents for others |
+| `t!memory add @user <fact>` | Manually add a fact | parents only |
+| `t!memory remove @user <number>` | Remove a fact by number | parents only |
+| `t!memory clear @user` | Wipe all facts for a user | parents only |
+| `t!memory delete @user` | Fully remove a user from memory | parents only |
+| `t!memory list` | List all users T.O.R.I.E. remembers | parents only |
+
 ---
 
 ## Hosting
 
-### ⚠️ Music (DEPRECATED — Not Maintained)
-The music system is no longer actively maintained. The music.py module will be removed in a future version.
-
-If you still want to use it, deploy to a free Oracle Cloud VM (ARM A1 Flex, always free) since Railway bans music bots:
-
-```bash
-# Install dependencies
-sudo apt update && sudo apt install python3-pip ffmpeg -y
-pip install -r requirements.txt
-
-# Run with pm2 or screen
-screen -S torie
-python main.py
-# Ctrl+A, D to detach
-```
-
-> **Note:** Consider replacing the music system with Discord's built-in streaming features or external music bots instead.
+Deployed on [Railway](https://railway.app) — push to `main`, Railway builds and runs `python main.py` via the `Procfile`. No special configuration needed beyond setting the environment variables in the Railway dashboard.
 
 ---
 
@@ -259,8 +278,6 @@ T.O.R.I.E. knows her family and treats them differently — special greetings, w
 | `GROQ_API_KEY` | ✅ | Groq API key for AI responses |
 | `MONGODB_URI` | ✅ | MongoDB Atlas connection string |
 | `KLIPY_API_KEY` | ✅ | Klipy GIF API key (free at klipy.com/developers) |
-| `SPOTIFY_CLIENT_ID` | ⚠️ Music only | Spotify Developer App client ID |
-| `SPOTIFY_CLIENT_SECRET` | ⚠️ Music only | Spotify Developer App client secret |
 
 ---
 
