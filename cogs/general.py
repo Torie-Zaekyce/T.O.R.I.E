@@ -207,5 +207,62 @@ class GeneralCog(commands.Cog, name="General"):
         await ctx.send(embed=embed)
 
 
+    # ── Slash commands ───────────────────────────────────────────────────────
+
+    @discord.app_commands.command(name="ping", description="Check if I'm alive + latency")
+    async def ping_slash(self, interaction: discord.Interaction):
+        latency = round(self.bot.latency * 1000)
+        embed = discord.Embed(
+            description=f"🏓 Pong! Latency: **{latency}ms** — {'sharp as ever! ⚡' if latency < 100 else 'a little slow today 😴'}",
+            color=discord.Color.green() if latency < 100 else discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @discord.app_commands.command(name="whoami", description="Find out who you are to T.O.R.I.E.")
+    async def whoami_slash(self, interaction: discord.Interaction):
+        await interaction.response.send_message(_WHOAMI_RESPONSES.get(
+            get_role(interaction.user),
+            "Hello! valued member of this server! 😊 Not a creator, but still cool."
+        ))
+
+    @discord.app_commands.command(name="greet", description="Get a personalized greeting")
+    async def greet_slash(self, interaction: discord.Interaction):
+        await interaction.response.send_message(_GREET_RESPONSES.get(
+            get_role(interaction.user),
+            "Heya! 👋 Good to see you around here!"
+        ))
+
+    @discord.app_commands.command(name="family", description="See T.O.R.I.E.'s whole family tree")
+    async def family_slash(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title       = "👨‍👩‍👧 T.O.R.I.E.'s Family",
+            description = "The people responsible for my existence. Blame them.",
+            color       = discord.Color.blurple()
+        )
+        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",                         value="Creator. Built me from scratch. Questionable life choice.",          inline=False)
+        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",                         value="Co-Creator. Helped shape who I am. The good parts are hers.",        inline=False)
+        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}",             value="Starry Cousin. The one and only purple star.",                        inline=False)
+        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",              value="Croissant Cousin. The one and only Kwaso.",                           inline=False)
+        embed.add_field(name=f"📚 Cousin — {COUSIN['cousin_hyu']['username']}",                value="Curious Cousin. Curiosity kills the cat, but not this one.",          inline=False)
+        embed.add_field(name=f"❤️‍🩹 Cousin — {COUSIN['cousin_mimi']['username']}",              value="Serious Cousin. Serious yet sweet.",                                   inline=False)
+        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",                  value="Goated Uncle. The one and only Cacolate.",                            inline=False)
+        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",                  value="Chimera Uncle. The one and only Vari.",                               inline=False)
+        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",               value="Big Sister. The most funny AI Sister.",                               inline=False)
+        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",                value="Big Sister. The most sweetest Sister.",                               inline=False)
+        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kio']['username']}",                value="New Sister. Welcome to the family!",                                  inline=False)
+        embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",               inline=False)
+        embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.app_commands.command(name="help", description="Show T.O.R.I.E.'s command list")
+    async def help_slash(self, interaction: discord.Interaction):
+        view = HelpPagerView(interaction.user)
+        await interaction.response.send_message(embed=view.build_embed(), view=view)
+        view.message = await interaction.original_response()
+
+
 async def setup(bot: commands.Bot):
-    await bot.add_cog(GeneralCog(bot))
+    cog = GeneralCog(bot)
+    await bot.add_cog(cog)
+    for cmd in (cog.ping_slash, cog.whoami_slash, cog.greet_slash, cog.family_slash, cog.help_slash):
+        bot.tree.add_command(cmd)

@@ -24,9 +24,9 @@ No test suite, no lint/typecheck config, no CI/CD. `.env` with `DISCORD_TOKEN`, 
 - **Family IDs are hardcoded** in `bot/family.py:3-24` — 12 Discord user IDs determine role-based perms. Parents (`TorieRingo`/`Nico`) get `mod`; cousins/uncles/sisters/brother-in-law get `mute unmute warn purge sendmsg`. Others have no default perms.
 - **AI provider**: Groq only. Primary model `llama-3.3-70b-versatile`, fallback `llama-3.1-8b-instant`, vision `meta-llama/llama-4-scout-17b-16e-instruct` (all in `bot/config.py:12-14`).
 - **Prompt injection defense**: 13 compiled regex patterns in `bot/config.py:20-33` checked via `bot/utils.py:sanitize_input()`. Messages matching any pattern are silently dropped.
-- **Mute uses a Discord role** (`MUTED_ROLE_ID` in config). Auto-unmute via `asyncio.create_task` with `asyncio.sleep`. Cancellation tracked in `_mute_tasks` dict in `main.py:33`.
+- **Mute uses a Discord role** (`MUTED_ROLE_ID` in config). Auto-unmute via `asyncio.create_task` with `asyncio.sleep`. Cancellation tracked in `bot._mute_tasks` dict (`main.py:47`).
 - **Memory extraction**: `bot/user_memory.py:197-231` makes a secondary LLM call (temperature 0.2, 120 tokens) to extract facts from user messages. JSON parsing from response, max 20 facts per user.
 - **Personality modes**: Keyword-driven detection in `bot/personality.py:258-265` (priority: roast > hype > advice > game > default). Each mode has separate max_tokens budget (80-250).
 - **Timezone**: All scheduled announcements use `Asia/Manila` (pytz). Greeting times hardcoded in `bot/config.py:37-42`.
 - **Reply chain**: `bot/utils.py:fetch_reply_chain()` walks up to 6 parent messages for AI context (`MAX_CHAIN_DEPTH` in config).
-- **Prefix commands**: `t!` prefix. Slash commands exist (`/sendmsg`) and must call `bot.tree.sync()` after any change.
+- **Prefix + slash**: Every `t!` command has a `/` equivalent. New slash commands must be registered with `bot.tree.add_command()` in the cog's `setup()`. `bot.tree.sync()` is already called in `on_ready` (`main.py:285`).

@@ -149,5 +149,108 @@ class MemoryCog(commands.Cog, name="Memory"):
         await ctx.send(embed=embed)
 
 
+    # ── Slash commands ───────────────────────────────────────────────────────
+
+    memory_slash = discord.app_commands.Group(name="memory", description="View and manage user memories")
+
+    @memory_slash.command(name="view", description="View memories for yourself or another user")
+    @discord.app_commands.describe(member="The user to check (defaults to yourself)")
+    async def memory_view_slash(self, interaction: discord.Interaction, member: discord.Member | None = None):
+        target = member or interaction.user
+        if member and member != interaction.user and not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can view other people's memories.", ephemeral=True)
+            return
+        doc = get_user_memory(str(target.id))
+        if not doc or not doc.get("facts"):
+            await interaction.response.send_message(f"🧠 No memories stored for **{target.display_name}** yet.")
+            return
+        facts_text = "\n".join(f"`{i+1}.` {f}" for i, f in enumerate(doc["facts"]))
+        embed = discord.Embed(
+            title=f"🧠 Memory — {target.display_name}",
+            description=facts_text,
+            color=discord.Color.blurple()
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        last_seen = doc.get("last_seen")
+        if last_seen:
+            if last_seen.tzinfo is None:
+                last_seen = last_seen.replace(tzinfo=timezone.utc)
+            embed.add_field(name="Last seen", value=f"<t:{int(last_seen.timestamp())}:R>", inline=True)
+        embed.add_field(name="Interactions", value=str(doc.get("interaction_count", 0)), inline=True)
+        embed.set_footer(text=f"{len(doc['facts'])} fact(s) stored")
+        await interaction.response.send_message(embed=embed)
+
+    @memory_slash.command(name="add", description="Manually add a fact to a user's memory (parents only)")
+    @discord.app_commands.describe(member="The user to add a memory for", fact="The fact to remember")
+    async def memory_add_slash(self, interaction: discord.Interaction, member: discord.Member, fact: str):
+        if not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can manually add memories.", ephemeral=True)
+            return
+        added = add_single_fact(str(member.id), member.display_name, fact.strip())
+        if added:
+            await interaction.response.send_message(f"✅ Added to **{member.display_name}**'s memory:\n> {fact.strip()}")
+        else:
+            await interaction.response.send_message(f"⚠️ That fact is already in **{member.display_name}**'s memory.")
+
+    @memory_slash.command(name="remove", description="Remove a fact by number from a user's memory (parents only)")
+    @discord.app_commands.describe(member="The user to remove a memory from", index="Fact number to remove")
+    async def memory_remove_slash(self, interaction: discord.Interaction, member: discord.Member, index: int):
+        if not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can remove memories.", ephemeral=True)
+            return
+        removed = remove_fact_by_index(str(member.id), index)
+        if removed:
+            await interaction.response.send_message(f"✅ Removed fact #{index} from **{member.display_name}**:\n> {removed}")
+        else:
+            await interaction.response.send_message(f"⚠️ No fact #{index} found for **{member.display_name}**. Use `/memory view` to check.")
+
+    @memory_slash.command(name="clear", description="Wipe all facts for a user (parents only)")
+    @discord.app_commands.describe(member="The user to wipe memories for")
+    async def memory_clear_slash(self, interaction: discord.Interaction, member: discord.Member):
+        if not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can clear memories.", ephemeral=True)
+            return
+        cleared = clear_facts(str(member.id))
+        if cleared:
+            await interaction.response.send_message(f"✅ Cleared all memories for **{member.display_name}**.")
+        else:
+            await interaction.response.send_message(f"⚠️ No memory document found for **{member.display_name}**.")
+
+    @memory_slash.command(name="delete", description="Fully remove a user from T.O.R.I.E.'s memory (parents only)")
+    @discord.app_commands.describe(member="The user to delete from memory")
+    async def memory_delete_slash(self, interaction: discord.Interaction, member: discord.Member):
+        if not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can delete memory records.", ephemeral=True)
+            return
+        deleted = delete_user_memory(str(member.id))
+        if deleted:
+            await interaction.response.send_message(f"🗑️ Fully removed **{member.display_name}** from T.O.R.I.E.'s memory.")
+        else:
+            await interaction.response.send_message(f"⚠️ No memory document found for **{member.display_name}**.")
+
+    @memory_slash.command(name="list", description="List all users T.O.R.I.E. remembers (parents only)")
+    async def memory_list_slash(self, interaction: discord.Interaction):
+        if not get_parent_role(interaction.user):
+            await interaction.response.send_message("⛔ Only my parents can list all memories.", ephemeral=True)
+            return
+        docs = all_memories()
+        if not docs:
+            await interaction.response.send_message("🧠 No user memories stored yet.")
+            return
+        lines = [
+            f"<@{d['_id']}> **{d.get('display_name', 'Unknown')}** — {d.get('interaction_count', 0)} interaction(s)"
+            for d in sorted(docs, key=lambda x: x.get("interaction_count", 0), reverse=True)
+        ]
+        embed = discord.Embed(
+            title=f"🧠 All Remembered Users ({len(docs)})",
+            description="\n".join(lines),
+            color=discord.Color.blurple()
+        )
+        embed.set_footer(text="Use /memory view to see their facts")
+        await interaction.response.send_message(embed=embed)
+
+
 async def setup(bot: commands.Bot):
-    await bot.add_cog(MemoryCog(bot))
+    cog = MemoryCog(bot)
+    await bot.add_cog(cog)
+    bot.tree.add_command(cog.memory_slash)

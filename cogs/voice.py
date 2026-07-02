@@ -113,5 +113,69 @@ class VoiceCog(commands.Cog, name="Voice"):
             task.cancel()
 
 
+    # ── Slash commands ───────────────────────────────────────────────────────
+
+    @discord.app_commands.command(name="join", description="Join your voice channel")
+    async def join_slash(self, interaction: discord.Interaction):
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message("⚠️ You need to be in a voice channel first!", ephemeral=True)
+            return
+        channel = interaction.user.voice.channel
+        voice_client = interaction.guild.voice_client
+        if voice_client:
+            if voice_client.channel == channel:
+                await interaction.response.send_message(f"🔊 I'm already in {channel.mention}.")
+                return
+            await voice_client.move_to(channel)
+        else:
+            try:
+                await channel.connect()
+            except discord.ClientException:
+                await interaction.response.send_message("⚠️ Already connecting/connected here.", ephemeral=True)
+                return
+            except asyncio.TimeoutError:
+                await interaction.response.send_message("⛔ Couldn't connect — timed out.", ephemeral=True)
+                return
+        await interaction.response.send_message(f"🔊 Joined {channel.mention}!")
+
+    @discord.app_commands.command(name="leave", description="Leave the voice channel")
+    async def leave_slash(self, interaction: discord.Interaction):
+        voice_client = interaction.guild.voice_client
+        if not voice_client:
+            await interaction.response.send_message("⚠️ I'm not in a voice channel.", ephemeral=True)
+            return
+        await voice_client.disconnect()
+        await interaction.response.send_message("👋 Left the voice channel.")
+
+    @discord.app_commands.command(name="say", description="Speak text out loud via TTS in voice channel")
+    @discord.app_commands.describe(text="The text to speak")
+    async def say_slash(self, interaction: discord.Interaction, text: str):
+        if not text:
+            await interaction.response.send_message("⚠️ Please provide text to speak.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        voice_client = interaction.guild.voice_client
+        if not voice_client:
+            if not interaction.user.voice or not interaction.user.voice.channel:
+                await interaction.followup.send("⚠️ I'm not in a voice channel, and neither are you. Join one first!")
+                return
+            try:
+                voice_client = await interaction.user.voice.channel.connect()
+            except Exception as e:
+                await interaction.followup.send(f"⛔ Couldn't join voice channel: {e}")
+                return
+        from bot.tts import generate_tts, DEFAULT_VOICE
+        path = await generate_tts(text, voice=DEFAULT_VOICE)
+        if not path:
+            await interaction.followup.send("❌ TTS generation failed. Try again?")
+            return
+        queue = self._get_queue(interaction.guild_id)
+        await queue.put((voice_client, path))
+        await interaction.followup.send(f"🔊 Speaking: \"{text}\"")
+
+
 async def setup(bot: commands.Bot):
-    await bot.add_cog(VoiceCog(bot))
+    cog = VoiceCog(bot)
+    await bot.add_cog(cog)
+    for cmd in (cog.join_slash, cog.leave_slash, cog.say_slash):
+        bot.tree.add_command(cmd)
