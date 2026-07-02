@@ -24,7 +24,7 @@ from bot.utils import (
     sanitize_reply, fetch_reply_chain
 )
 from bot.moderation import (
-    handle_warn, handle_mute, handle_unmute
+    handle_warn, handle_mute, handle_unmute, _mute_tasks
 )
 from cogs.interactions import _INTERACTION_ACTIONS, _search_klipy_gif
 from datetime import datetime, timedelta as _td
@@ -47,7 +47,6 @@ except Exception as e:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="t!", help_command=None, intents=intents)
-bot._mute_tasks = {}
 
 # ─── Torie class ──────────────────────────────────────────────────────────────
 
@@ -380,12 +379,12 @@ async def on_message(message: discord.Message):
 
     # Mute
     if targets and re.search(r'\bmute\b', lowered) and not re.search(r'\bunmute\b', lowered):
-        await handle_mute(message, targets, clean_msg, bot, bot._mute_tasks)
+        await handle_mute(message, targets, clean_msg, bot, _mute_tasks)
         return
 
     # Unmute
     if targets and re.search(r'\bunmute\b', lowered):
-        await handle_unmute(message, targets, bot, bot._mute_tasks)
+        await handle_unmute(message, targets, bot, _mute_tasks)
         return
 
     # Length / injection check
