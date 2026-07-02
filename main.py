@@ -24,7 +24,7 @@ from bot.utils import (
     sanitize_reply, fetch_reply_chain
 )
 from bot.moderation import (
-    handle_warn, handle_mute, handle_unmute, _mute_tasks
+    handle_warn, handle_mute, handle_unmute,
 )
 from cogs.interactions import _INTERACTION_ACTIONS, _search_klipy_gif
 from datetime import datetime, timedelta as _td
