@@ -84,52 +84,49 @@ async def _run_interaction_slash(interaction: discord.Interaction, target: disco
     await interaction.response.send_message(embed=embed)
 
 
+async def _send_board(
+    bot: commands.Bot,
+    channel: discord.TextChannel,
+    author: discord.abc.User,
+    session,
+    send_func,
+):
+    from bot.minigames import extract_board_snapshot, _BOARD_RE, _TTT_RE, _BSHIP_RE
+    pattern = {"chess": _BOARD_RE, "tictactoe": _TTT_RE, "battleship": _BSHIP_RE}.get(session.kind)
+    if pattern is None:
+        await send_func("❓ Unknown game type.")
+        return
+    board_embed = None
+    async for msg in channel.history(limit=40):
+        if msg.author == bot.user and pattern.search(msg.content):
+            _, board_embed = extract_board_snapshot(msg.content, session.kind)
+            if board_embed:
+                break
+    if board_embed is None:
+        await send_func(embed=discord.Embed(
+            description="⚠️ No board snapshot found yet. Make a move first!",
+            color=discord.Color.orange()
+        ))
+        return
+    board_embed.set_footer(text=f"t!board — {session.kind.title()} • {author.display_name}")
+    await send_func(embed=board_embed)
+
+
+def _make_interaction_prefix(action: str):
+    async def callback(ctx, target: discord.Member):
+        await _run_interaction(ctx, target, action)
+    return callback
+
+
+def _make_interaction_slash(action: str, desc: str):
+    async def callback(interaction: discord.Interaction, target: discord.Member):
+        await _run_interaction_slash(interaction, target, action)
+    return discord.app_commands.Command(callback=callback, name=action, description=desc)
+
+
 class InteractionsCog(commands.Cog, name="Interactions"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # One command per action — keeps error messages and help clean
-    # ── Slash: GIF interactions ──────────────────────────────────────────────
-
-    @discord.app_commands.command(name="hug", description="Hug someone with a GIF!")
-    @discord.app_commands.describe(target="Who to hug")
-    async def hug_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "hug")
-
-    @discord.app_commands.command(name="kiss", description="Kiss someone with a GIF!")
-    @discord.app_commands.describe(target="Who to kiss")
-    async def kiss_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "kiss")
-
-    @discord.app_commands.command(name="pat", description="Pat someone with a GIF!")
-    @discord.app_commands.describe(target="Who to pat")
-    async def pat_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "pat")
-
-    @discord.app_commands.command(name="bite", description="Bite someone with a GIF!")
-    @discord.app_commands.describe(target="Who to bite")
-    async def bite_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "bite")
-
-    @discord.app_commands.command(name="lick", description="Lick someone with a GIF!")
-    @discord.app_commands.describe(target="Who to lick")
-    async def lick_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "lick")
-
-    @discord.app_commands.command(name="punch", description="Punch someone with a GIF!")
-    @discord.app_commands.describe(target="Who to punch")
-    async def punch_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "punch")
-
-    @discord.app_commands.command(name="kick", description="Kick someone with a GIF!")
-    @discord.app_commands.describe(target="Who to kick")
-    async def kick_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "kick")
-
-    @discord.app_commands.command(name="fuck", description="Hold hands with someone! ( ͡° ͜ʖ ͡°)")
-    @discord.app_commands.describe(target="Who to hold hands with")
-    async def fuck_slash(self, interaction: discord.Interaction, target: discord.Member):
-        await _run_interaction_slash(interaction, target, "fuck")
 
     @discord.app_commands.command(name="board", description="Show the current minigame board")
     async def board_slash(self, interaction: discord.Interaction):
@@ -141,64 +138,11 @@ class InteractionsCog(commands.Cog, name="Interactions"):
                 color=discord.Color.red()
             ))
             return
-        pattern = {"chess": _BOARD_RE, "tictactoe": _TTT_RE, "battleship": _BSHIP_RE}.get(session.kind)
-        if pattern is None:
-            await interaction.response.send_message("❓ Unknown game type.")
-            return
-        board_embed = None
-        async for msg in interaction.channel.history(limit=40):
-            if msg.author == self.bot.user and pattern.search(msg.content):
-                _, board_embed = extract_board_snapshot(msg.content, session.kind)
-                if board_embed:
-                    break
-        if board_embed is None:
-            await interaction.response.send_message(embed=discord.Embed(
-                description="⚠️ No board snapshot found yet. Make a move first!",
-                color=discord.Color.orange()
-            ))
-            return
-        board_embed.set_footer(text=f"t!board — {session.kind.title()} • {interaction.user.display_name}")
-        await interaction.response.send_message(embed=board_embed)
-
-    @commands.command(name="hug")
-    async def hug(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "hug")
-
-    @commands.command(name="kiss")
-    async def kiss(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "kiss")
-
-    @commands.command(name="pat")
-    async def pat(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "pat")
-
-    @commands.command(name="bite")
-    async def bite(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "bite")
-
-    @commands.command(name="lick")
-    async def lick(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "lick")
-
-    @commands.command(name="punch")
-    async def punch(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "punch")
-
-    @commands.command(name="kick")
-    async def kick(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "kick")
-
-    @commands.command(name="fuck")
-    async def fuck(self, ctx, target: discord.Member):
-        await _run_interaction(ctx, target, "fuck")
+        await _send_board(self.bot, interaction.channel, interaction.user, session, interaction.response.send_message)
 
     @commands.command(name="tor")
     async def tor(self, ctx, action: str, target: discord.Member):
         await _run_interaction(ctx, target, action.lower())
-
-    # -----------------------------------------------------------------------
-    # t!board — show current minigame board
-    # -----------------------------------------------------------------------
 
     @commands.command(name="board")
     async def board_cmd(self, ctx):
@@ -210,29 +154,13 @@ class InteractionsCog(commands.Cog, name="Interactions"):
                 color=discord.Color.red()
             ))
             return
-        pattern = {"chess": _BOARD_RE, "tictactoe": _TTT_RE, "battleship": _BSHIP_RE}.get(session.kind)
-        if pattern is None:
-            await ctx.send("❓ Unknown game type.")
-            return
-        board_embed = None
-        async for msg in ctx.channel.history(limit=40):
-            if msg.author == self.bot.user and pattern.search(msg.content):
-                _, board_embed = extract_board_snapshot(msg.content, session.kind)
-                if board_embed:
-                    break
-        if board_embed is None:
-            await ctx.send(embed=discord.Embed(
-                description="⚠️ No board snapshot found yet. Make a move first!",
-                color=discord.Color.orange()
-            ))
-            return
-        board_embed.set_footer(text=f"t!board — {session.kind.title()} • {ctx.author.display_name}")
-        await ctx.send(embed=board_embed)
+        await _send_board(self.bot, ctx.channel, ctx.author, session, ctx.send)
 
 
 async def setup(bot: commands.Bot):
     cog = InteractionsCog(bot)
     await bot.add_cog(cog)
-    for cmd in (cog.hug_slash, cog.kiss_slash, cog.pat_slash, cog.bite_slash, cog.lick_slash,
-                cog.punch_slash, cog.kick_slash, cog.fuck_slash, cog.board_slash):
-        bot.tree.add_command(cmd)
+    for action in _INTERACTION_ACTIONS:
+        bot.add_command(commands.Command(_make_interaction_prefix(action), name=action))
+        bot.tree.add_command(_make_interaction_slash(action, f"{action.title()} someone with a GIF!"))
+    bot.tree.add_command(cog.board_slash)

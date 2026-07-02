@@ -82,6 +82,10 @@ async def fetch_reply_chain(message: discord.Message, max_depth: int = 6) -> lis
             current = parent
             continue
 
+        # Drop the entire chain if any parent message contains prompt injection
+        if INJECTION_REGEX.search(content):
+            return []
+
         role = "assistant" if parent.author.bot else "user"
         if role == "user":
             content = f"{parent.author.display_name}: {content}"

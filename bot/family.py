@@ -23,9 +23,6 @@ BROTHER_IN_LAW = {
     "broinlaw_haru": {"username": "Haru", "id": 800304284541124638, "title": "Brother in Law", "role": "In Law"},
 }
 
-HUSBAND = {}
-FRIENDS = {}
-
 # --- Lookup tables (built once at import time) ---
 _ID_TO_ROLE:   dict[int, str] = {}
 _NAME_TO_ROLE: dict[str, str] = {}

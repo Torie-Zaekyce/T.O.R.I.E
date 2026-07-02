@@ -1,3 +1,5 @@
+import signal
+
 import discord
 from discord.ext import commands, tasks
 from groq import Groq
@@ -15,7 +17,7 @@ from bot.config import (
     MAX_MESSAGE_LENGTH, MAX_REPLY_LENGTH, INJECTION_REGEX,
     TIMEZONE, GREET_HOUR, LUNCH_HOUR, DINNER_HOUR, DINNER_MINUTE,
     EVENING_HOUR, MIDNIGHT_HOUR, GENERAL_CHANNEL, BIRTHDAY_CHANNEL,
-    BIRTHDAY_PING_ROLE, GREETINGS, CONTEXT_NOTES
+    BIRTHDAY_PING_ROLE, GREETINGS, CONTEXT_NOTES, MAX_RETRIES
 )
 from bot.utils import (
     parse_duration, fmt_duration, sanitize_input,
@@ -24,13 +26,12 @@ from bot.utils import (
 from bot.moderation import (
     handle_warn, handle_mute, handle_unmute
 )
+from cogs.interactions import _INTERACTION_ACTIONS, _search_klipy_gif
 from datetime import datetime, timedelta as _td
 import random
 import asyncio
 import re
 import os
-
-_mute_tasks: dict[int, asyncio.Task] = {}
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!"); exit(1)
@@ -46,6 +47,7 @@ except Exception as e:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="t!", help_command=None, intents=intents)
+bot._mute_tasks = {}
 
 # ─── Torie class ──────────────────────────────────────────────────────────────
 
@@ -61,14 +63,11 @@ class Torie(ToriePersonality):
             f"<@!{bot_user.id}>" in message.content
         )
 
-    def generate_response(self, user_message: str) -> str:
-        prompt, max_tokens = self.get_prompt(user_message)
+    def _call_groq(self, messages: list, max_tokens: int) -> str:
         for model in [GROQ_MODEL, GROQ_FALLBACK]:
             try:
                 response = groq_client.chat.completions.create(
-                    model    = model,
-                    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": user_message}],
-                    max_tokens=max_tokens, temperature=0.8,
+                    model=model, messages=messages, max_tokens=max_tokens, temperature=0.8,
                 )
                 return response.choices[0].message.content
             except Exception as e:
@@ -76,6 +75,13 @@ class Torie(ToriePersonality):
                     print(f"⚠️ Rate limit on {model} — trying fallback")
                     continue
                 raise
+
+    def generate_response(self, user_message: str) -> str:
+        prompt, max_tokens = self.get_prompt(user_message)
+        return self._call_groq(
+            [{"role": "system", "content": prompt}, {"role": "user", "content": user_message}],
+            max_tokens,
+        )
 
     def generate_response_with_history(self, user_message: str, history: list[dict], system_note: str = "") -> str:
         """Like generate_response but prepends a reply-chain history as prior turns."""
@@ -85,20 +91,7 @@ class Torie(ToriePersonality):
         messages = [{"role": "system", "content": prompt}]
         messages.extend(history)
         messages.append({"role": "user", "content": user_message})
-        for model in [GROQ_MODEL, GROQ_FALLBACK]:
-            try:
-                response = groq_client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=0.8,
-                )
-                return response.choices[0].message.content
-            except Exception as e:
-                if "429" in str(e) and model != GROQ_FALLBACK:
-                    print(f"⚠️ Rate limit on {model} — trying fallback")
-                    continue
-                raise
+        return self._call_groq(messages, max_tokens)
 
     def generate_vision_response(self, image_url: str, user_text: str = "") -> str:
         prompt_text = (
@@ -124,9 +117,50 @@ torie = Torie()
 
 # ─── AI reply handler ─────────────────────────────────────────────────────────
 
+def _build_contexted_msg(clean_msg: str, role_key: str | None, message: discord.Message, user_id: str) -> str:
+    note = CONTEXT_NOTES.get(role_key)
+    msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
+    memory_note = build_memory_note(user_id)
+    if memory_note:
+        msg = f"[{memory_note}]\n{msg}"
+    mentioned = [u for u in message.mentions if u != bot.user]
+    if mentioned:
+        def _safe_name(u: discord.User) -> str:
+            name = re.sub(r'[^\w\s\-]', '', u.display_name)[:32].strip() or "a user"
+            return f"{name} (mention them as {u.mention})"
+        mention_info = ", ".join(_safe_name(u) for u in mentioned)
+        msg = f"[Note: The following users were mentioned: {mention_info}. You may use their mention format directly in your reply.]\n{msg}"
+    return msg
+
+
+def _generate_reply(contexted_msg: str, history: list, session) -> str:
+    system_note = session.system_note if session else ""
+    for attempt in range(MAX_RETRIES + 1):
+        msg_to_send = (
+            contexted_msg if attempt == 0 else
+            f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
+        )
+        raw = (
+            torie.generate_response_with_history(msg_to_send, history, system_note)
+            if history else
+            torie.generate_response(msg_to_send)
+        )
+        if not contains_filtered_word(raw):
+            return sanitize_reply(raw)
+        print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
+    print("⚠️ Self-check: all retries exhausted — using fallback reply")
+    return "Hmm, I got tongue-tied. Try asking me something else! 😅"
+
+
+def _handle_session_aftermath(reply: str, clean_msg: str, session, channel_id: int, author_id: int, display_name: str):
+    if session is not None:
+        if session.is_ended_by(clean_msg) or session.is_ended_by(reply):
+            end_session(channel_id, author_id)
+            print(f"🎮 {session.kind.title()} session ended for {display_name} (game over detected)")
+
+
 async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: str | None) -> None:
 
-    # ── 1. Touch user record ─────────────────────────────────────────────────
     user_id      = str(message.author.id)
     display_name = message.author.display_name
     touch_user(user_id, display_name)
@@ -134,74 +168,26 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
     channel_id = message.channel.id
     author_id  = message.author.id
 
-    # ── 2. Session check — minigames ─────────────────────────────────────────
     session = get_session(channel_id, author_id)
-
     game_kind = detect_game_start(clean_msg)
     if session is None and game_kind:
         session = start_session(channel_id, author_id, kind=game_kind)
         print(f"🎮 {game_kind.title()} session started for {display_name} in #{message.channel.name}")
-
     if session is not None:
         session.touch()
 
     history = await fetch_reply_chain(message)
+    contexted_msg = _build_contexted_msg(clean_msg, role_key, message, user_id)
 
     async with message.channel.typing():
         try:
-            # ── 4. Build context note (family role) ──────────────────────────
-            note = CONTEXT_NOTES.get(role_key)
-            contexted_msg = f"[Note: This message is from {note}]\n{clean_msg}" if note else clean_msg
-
-            # ── 5. Inject memory facts ───────────────────────────────────────
-            memory_note = build_memory_note(user_id)
-            if memory_note:
-                contexted_msg = f"[{memory_note}]\n{contexted_msg}"
-
-            # ── 6. Inject mentioned-user context ─────────────────────────────
-            mentioned = [u for u in message.mentions if u != bot.user]
-            if mentioned:
-                def _safe_name(u: discord.User) -> str:
-                    name = re.sub(r'[^\w\s\-]', '', u.display_name)[:32].strip() or "a user"
-                    return f"{name} (mention them as {u.mention})"
-
-                mention_info  = ", ".join(_safe_name(u) for u in mentioned)
-                contexted_msg = (
-                    f"[Note: The following users were mentioned: {mention_info}. "
-                    f"You may use their mention format directly in your reply.]\n{contexted_msg}"
-                )
-
-            # ── 7. Generate reply ────────────────────────────────────────────
-            MAX_RETRIES = 2
-            reply = None
-
-            system_note = session.system_note if session else ""
-            for attempt in range(MAX_RETRIES + 1):
-                msg_to_send = contexted_msg if attempt == 0 else \
-                    f"{contexted_msg}\n[Note: Your previous response contained inappropriate language. Rephrase without any offensive words.]"
-                raw = (
-                    torie.generate_response_with_history(msg_to_send, history, system_note)
-                    if history else
-                    torie.generate_response(msg_to_send)
-                )
-                if not contains_filtered_word(raw):
-                    reply = raw
-                    break
-                print(f"⚠️ Response self-check failed (attempt {attempt + 1}) — regenerating...")
-
-            if reply is None:
-                reply = "Hmm, I got tongue-tied. Try asking me something else! 😅"
-                print("⚠️ Self-check: all retries exhausted — using fallback reply")
-
-            reply = sanitize_reply(reply)
+            reply = _generate_reply(contexted_msg, history, session)
             if len(reply) > MAX_REPLY_LENGTH:
                 reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
-
         except Exception as e:
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
 
-    # ── 8. Extract board snapshot and send reply + optional embed ──────────
     board_embed = None
     if session is not None:
         reply, board_embed = extract_board_snapshot(reply, session.kind)
@@ -210,13 +196,8 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
     if board_embed is not None:
         await message.channel.send(embed=board_embed)
 
-    # ── 9. Detect game-end from either side ──────────────────────────────────
-    if session is not None:
-        if session.is_ended_by(clean_msg) or session.is_ended_by(reply):
-            end_session(channel_id, author_id)
-            print(f"🎮 {session.kind.title()} session ended for {display_name} (game over detected)")
+    _handle_session_aftermath(reply, clean_msg, session, channel_id, author_id, display_name)
 
-    # ── 10. Extract & save facts in background ────────────────────────────────
     asyncio.create_task(
         asyncio.to_thread(
             extract_and_save_facts,
@@ -308,7 +289,6 @@ async def on_message(message: discord.Message):
         return
 
     # "tor <action> @user" — no prefix needed
-    from cogs.interactions import _INTERACTION_ACTIONS, _search_klipy_gif
     tor_match = re.match(r'^tor\s+(\w+)', message.content, re.IGNORECASE)
     if tor_match:
         action  = tor_match.group(1).lower()
@@ -400,12 +380,12 @@ async def on_message(message: discord.Message):
 
     # Mute
     if targets and re.search(r'\bmute\b', lowered) and not re.search(r'\bunmute\b', lowered):
-        await handle_mute(message, targets, clean_msg, bot, _mute_tasks)
+        await handle_mute(message, targets, clean_msg, bot, bot._mute_tasks)
         return
 
     # Unmute
     if targets and re.search(r'\bunmute\b', lowered):
-        await handle_unmute(message, targets, bot, _mute_tasks)
+        await handle_unmute(message, targets, bot, bot._mute_tasks)
         return
 
     # Length / injection check
@@ -435,6 +415,26 @@ async def on_command_error(ctx, error):
         print(f"⚠️ Unhandled command error: {error}")
 
 
+async def shutdown():
+    print("\n🛑 Shutting down T.O.R.I.E....")
+    for task in list(bot._mute_tasks.values()):
+        task.cancel()
+    bot._mute_tasks.clear()
+    scheduled_announcements.cancel()
+    await bot.close()
+
+
+def _handle_sig():
+    asyncio.ensure_future(shutdown())
+
+
 if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _handle_sig)
+        except NotImplementedError:
+            # Windows or restricted environment — fall back to no-op
+            pass
     print("Starting T.O.R.I.E....")
     bot.run(DISCORD_TOKEN)

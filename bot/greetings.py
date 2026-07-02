@@ -50,5 +50,4 @@ MIDNIGHT_GREETINGS = [
     "It’s officially midnight! 🌔 Time to choose: go to bed now or stay up until your brain starts a 4K playback of that embarrassing thing you said in 2013. 💀🕯️",
     "Happy midnight! 🌔 You’ve reached the point of no return where tomorrow morning is going to be a personal tragedy. Do yourself a favor and log off. ☕📉",
     "Welcome to the midnight hour. 🌔 There are no more memes left to see, only eye strain and existential dread. Your reward is sleep—take it. 📱🫠",
-    "",
 ]

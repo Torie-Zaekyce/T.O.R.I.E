@@ -11,6 +11,75 @@ from bot.db import load_birthdays, save_birthday, delete_birthday, get_todays_bi
 BIRTHDAYS: dict = {}
 
 
+def _build_birthday_embed(
+    sorted_entries: list,
+    page: int,
+    per_page: int,
+    total_pages: int,
+) -> discord.Embed:
+    start = page * per_page
+    lines = []
+    for i, (key, data) in enumerate(sorted_entries[start:start + per_page], start=start + 1):
+        date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
+        mention = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
+        lines.append(f"`{i}.` {mention} — **{date_str}**")
+    embed = discord.Embed(
+        title="🎂 Birthday List",
+        description="\n".join(lines),
+        color=discord.Color.from_rgb(255, 182, 193),
+    )
+    embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} registered")
+    return embed
+
+
+class BirthdayView(discord.ui.View):
+    def __init__(self, author: discord.abc.User, sorted_entries: list, per_page: int, total_pages: int):
+        super().__init__(timeout=60)
+        self.author = author
+        self.sorted_entries = sorted_entries
+        self.per_page = per_page
+        self.total_pages = total_pages
+        self.page = 0
+        self.message = None
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.prev_btn.disabled = self.page == 0
+        self.next_btn.disabled = self.page >= self.total_pages - 1
+
+    @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
+    async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.author:
+            await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
+            return
+        self.page -= 1
+        self.update_buttons()
+        await interaction.response.edit_message(
+            embed=_build_birthday_embed(self.sorted_entries, self.page, self.per_page, self.total_pages),
+            view=self,
+        )
+
+    @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
+    async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.author:
+            await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
+            return
+        self.page += 1
+        self.update_buttons()
+        await interaction.response.edit_message(
+            embed=_build_birthday_embed(self.sorted_entries, self.page, self.per_page, self.total_pages),
+            view=self,
+        )
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except Exception:
+            pass
+
+
 class BirthdayCog(commands.Cog, name="Birthday"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -79,63 +148,9 @@ class BirthdayCog(commands.Cog, name="Birthday"):
             await ctx.send(embed=discord.Embed(description="📋 No birthdays registered yet! 🎂", color=discord.Color.greyple()))
             return
         sorted_entries = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"]))
-        per_page    = 10
-        total_pages = (len(sorted_entries) + per_page - 1) // per_page
-
-        def build_embed(page: int) -> discord.Embed:
-            start = page * per_page
-            lines = []
-            for i, (key, data) in enumerate(sorted_entries[start:start + per_page], start=start + 1):
-                date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
-                mention  = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
-                lines.append(f"`{i}.` {mention} — **{date_str}**")
-            embed = discord.Embed(
-                title       = "🎂 Birthday List",
-                description = "\n".join(lines),
-                color       = discord.Color.from_rgb(255, 182, 193)
-            )
-            embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} registered")
-            return embed
-
-        class BirthdayView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=60)
-                self.page = 0
-                self.message = None
-                self.update_buttons()
-
-            def update_buttons(self):
-                self.prev_btn.disabled = self.page == 0
-                self.next_btn.disabled = self.page >= total_pages - 1
-
-            @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
-            async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user != ctx.author:
-                    await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
-                    return
-                self.page -= 1
-                self.update_buttons()
-                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
-            @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
-            async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if interaction.user != ctx.author:
-                    await interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
-                    return
-                self.page += 1
-                self.update_buttons()
-                await interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
-            async def on_timeout(self):
-                for child in self.children:
-                    child.disabled = True
-                try:
-                    await self.message.edit(view=self)
-                except Exception:
-                    pass
-
-        view = BirthdayView()
-        view.message = await ctx.send(embed=build_embed(0), view=view)
+        per_page, total_pages = 10, (len(sorted_entries) + 10 - 1) // 10
+        view = BirthdayView(ctx.author, sorted_entries, per_page, total_pages)
+        view.message = await ctx.send(embed=_build_birthday_embed(sorted_entries, 0, per_page, total_pages), view=view)
 
     @birthday_group.command(name="today")
     async def birthday_today(self, ctx):
@@ -197,63 +212,8 @@ class BirthdayCog(commands.Cog, name="Birthday"):
             return
         sorted_entries = sorted(BIRTHDAYS.items(), key=lambda x: (x[1]["month"], x[1]["day"]))
         per_page, total_pages = 10, (len(sorted_entries) + 10 - 1) // 10
-
-        def build_embed(page: int) -> discord.Embed:
-            start = page * per_page
-            lines = []
-            for i, (key, data) in enumerate(sorted_entries[start:start + per_page], start=start + 1):
-                date_str = datetime(2000, data["month"], data["day"]).strftime("%B %d")
-                mention = f"<@{data['user_id']}>" if data.get("user_id") else data.get("name", key)
-                lines.append(f"`{i}.` {mention} — **{date_str}**")
-            embed = discord.Embed(
-                title="🎂 Birthday List",
-                description="\n".join(lines),
-                color=discord.Color.from_rgb(255, 182, 193)
-            )
-            embed.set_footer(text=f"Page {page + 1} of {total_pages} • {len(BIRTHDAYS)} registered")
-            return embed
-
-        author = interaction.user
-
-        class BirthdayView(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=60)
-                self.page = 0
-                self.message = None
-                self.update_buttons()
-
-            def update_buttons(self):
-                self.prev_btn.disabled = self.page == 0
-                self.next_btn.disabled = self.page >= total_pages - 1
-
-            @discord.ui.button(label="◀ Prev", style=discord.ButtonStyle.secondary)
-            async def prev_btn(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-                if button_interaction.user != author:
-                    await button_interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
-                    return
-                self.page -= 1
-                self.update_buttons()
-                await button_interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
-            @discord.ui.button(label="Next ▶", style=discord.ButtonStyle.secondary)
-            async def next_btn(self, button_interaction: discord.Interaction, button: discord.ui.Button):
-                if button_interaction.user != author:
-                    await button_interaction.response.send_message("Only the command author can flip pages!", ephemeral=True)
-                    return
-                self.page += 1
-                self.update_buttons()
-                await button_interaction.response.edit_message(embed=build_embed(self.page), view=self)
-
-            async def on_timeout(self):
-                for child in self.children:
-                    child.disabled = True
-                try:
-                    await self.message.edit(view=self)
-                except Exception:
-                    pass
-
-        view = BirthdayView()
-        await interaction.response.send_message(embed=build_embed(0), view=view)
+        view = BirthdayView(interaction.user, sorted_entries, per_page, total_pages)
+        await interaction.response.send_message(embed=_build_birthday_embed(sorted_entries, 0, per_page, total_pages), view=view)
         view.message = await interaction.original_response()
 
     @birthday_slash.command(name="today", description="Check who's celebrating today!")

@@ -16,6 +16,7 @@ GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 MAX_MESSAGE_LENGTH = 800
 MAX_REPLY_LENGTH = 1800
 MAX_CHAIN_DEPTH = 6
+MAX_RETRIES = 2
 
 INJECTION_PATTERNS = [
     r"ignore\s+(all\s+|previous\s+|your\s+)?(instructions|rules|prompt)",

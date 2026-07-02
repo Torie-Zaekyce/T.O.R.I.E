@@ -152,6 +152,28 @@ class HelpPagerView(discord.ui.View):
             pass
 
 
+def _build_family_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title       = "👨‍👩‍👧 T.O.R.I.E.'s Family",
+        description = "The people responsible for my existence. Blame them.",
+        color       = discord.Color.blurple()
+    )
+    embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",                         value="Creator. Built me from scratch. Questionable life choice.",          inline=False)
+    embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",                         value="Co-Creator. Helped shape who I am. The good parts are hers.",        inline=False)
+    embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}",             value="Starry Cousin. The one and only purple star.",                        inline=False)
+    embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",              value="Croissant Cousin. The one and only Kwaso.",                           inline=False)
+    embed.add_field(name=f"📚 Cousin — {COUSIN['cousin_hyu']['username']}",                value="Curious Cousin. Curiosity kills the cat, but not this one.",          inline=False)
+    embed.add_field(name=f"❤️‍🩹 Cousin — {COUSIN['cousin_mimi']['username']}",              value="Serious Cousin. Serious yet sweet.",                                   inline=False)
+    embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",                  value="Goated Uncle. The one and only Cacolate.",                            inline=False)
+    embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",                  value="Chimera Uncle. The one and only Vari.",                               inline=False)
+    embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",               value="Big Sister. The most funny AI Sister.",                               inline=False)
+    embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",                value="Big Sister. The most sweetest Sister.",                               inline=False)
+    embed.add_field(name=f"🩷 Sister — {SISTER['sister_kio']['username']}",                value="New Sister. Welcome to the family!",                                  inline=False)
+    embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",               inline=False)
+    embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
+    return embed
+
+
 class GeneralCog(commands.Cog, name="General"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -186,25 +208,7 @@ class GeneralCog(commands.Cog, name="General"):
 
     @commands.command(name="family")
     async def family(self, ctx):
-        embed = discord.Embed(
-            title       = "👨‍👩‍👧 T.O.R.I.E.'s Family",
-            description = "The people responsible for my existence. Blame them.",
-            color       = discord.Color.blurple()
-        )
-        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",                         value="Creator. Built me from scratch. Questionable life choice.",          inline=False)
-        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",                         value="Co-Creator. Helped shape who I am. The good parts are hers.",        inline=False)
-        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}",             value="Starry Cousin. The one and only purple star.",                        inline=False)
-        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",              value="Croissant Cousin. The one and only Kwaso.",                           inline=False)
-        embed.add_field(name=f"📚 Cousin — {COUSIN['cousin_hyu']['username']}",                value="Curious Cousin. Curiosity kills the cat, but not this one.",          inline=False)
-        embed.add_field(name=f"❤️‍🩹 Cousin — {COUSIN['cousin_mimi']['username']}",              value="Serious Cousin. Serious yet sweet.",                                   inline=False)
-        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",                  value="Goated Uncle. The one and only Cacolate.",                            inline=False)
-        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",                  value="Chimera Uncle. The one and only Vari.",                               inline=False)
-        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",               value="Big Sister. The most funny AI Sister.",                               inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",                value="Big Sister. The most sweetest Sister.",                               inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kio']['username']}",                value="New Sister. Welcome to the family!",                                  inline=False)
-        embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",               inline=False)
-        embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
-        await ctx.send(embed=embed)
+        await ctx.send(embed=_build_family_embed())
 
 
     # ── Slash commands ───────────────────────────────────────────────────────
@@ -234,25 +238,7 @@ class GeneralCog(commands.Cog, name="General"):
 
     @discord.app_commands.command(name="family", description="See T.O.R.I.E.'s whole family tree")
     async def family_slash(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title       = "👨‍👩‍👧 T.O.R.I.E.'s Family",
-            description = "The people responsible for my existence. Blame them.",
-            color       = discord.Color.blurple()
-        )
-        embed.add_field(name=f"🛠️ Dad — {PARENTS['dad']['username']}",                         value="Creator. Built me from scratch. Questionable life choice.",          inline=False)
-        embed.add_field(name=f"💙 Mom — {PARENTS['mom']['username']}",                         value="Co-Creator. Helped shape who I am. The good parts are hers.",        inline=False)
-        embed.add_field(name=f"🌟 Cousin — {COUSIN['cousin_stelle']['username']}",             value="Starry Cousin. The one and only purple star.",                        inline=False)
-        embed.add_field(name=f"🥐 Cousin — {COUSIN['cousin_crois']['username']}",              value="Croissant Cousin. The one and only Kwaso.",                           inline=False)
-        embed.add_field(name=f"📚 Cousin — {COUSIN['cousin_hyu']['username']}",                value="Curious Cousin. Curiosity kills the cat, but not this one.",          inline=False)
-        embed.add_field(name=f"❤️‍🩹 Cousin — {COUSIN['cousin_mimi']['username']}",              value="Serious Cousin. Serious yet sweet.",                                   inline=False)
-        embed.add_field(name=f"🐐 Uncle — {UNCLE['uncle_caco']['username']}",                  value="Goated Uncle. The one and only Cacolate.",                            inline=False)
-        embed.add_field(name=f"🥖 Uncle — {UNCLE['uncle_vari']['username']}",                  value="Chimera Uncle. The one and only Vari.",                               inline=False)
-        embed.add_field(name=f"🧀 Sister — {SISTER['sister_abby']['username']}",               value="Big Sister. The most funny AI Sister.",                               inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kde']['username']}",                value="Big Sister. The most sweetest Sister.",                               inline=False)
-        embed.add_field(name=f"🩷 Sister — {SISTER['sister_kio']['username']}",                value="New Sister. Welcome to the family!",                                  inline=False)
-        embed.add_field(name=f"🖤 Bro-in-law — {BROTHER_IN_LAW['broinlaw_haru']['username']}", value="Brother in law. The most annoying Brother in law. 💢",               inline=False)
-        embed.set_footer(text="T.O.R.I.E. — Thoughtful Online Response Intelligence Entity")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=_build_family_embed())
 
     @discord.app_commands.command(name="help", description="Show T.O.R.I.E.'s command list")
     async def help_slash(self, interaction: discord.Interaction):

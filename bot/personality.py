@@ -243,15 +243,17 @@ _MAX_TOKENS: dict[PromptMode, int] = {
 # ---------------------------------------------------------------------------
 class ToriePersonality:
 
+    def __init__(self):
+        self._cached_system_prompt: str | None = None
+        self._traits_version: int = 0
+
     # Expose base prompt for vision calls that need a raw system string
     @property
     def SYSTEM_PROMPT(self) -> str:
-        return self._build_prompt(PromptMode.DEFAULT)
-
-    # Backwards-compatible alias used by generate_response
-    @property
-    def SYSTEM_PROMPT_BASE(self) -> str:
-        return _PROMPTS[PromptMode.DEFAULT]
+        if self._cached_system_prompt is None or self._traits_version != len(CUSTOM_TRAITS):
+            self._cached_system_prompt = self._build_prompt(PromptMode.DEFAULT)
+            self._traits_version = len(CUSTOM_TRAITS)
+        return self._cached_system_prompt
 
     # ── Mode detection ───────────────────────────────────────────────────────
 
@@ -263,10 +265,6 @@ class ToriePersonality:
             if _KW_RE[mode].search(lowered):
                 return mode
         return PromptMode.DEFAULT
-
-    def is_advice_request(self, message: str) -> bool:
-        """Backwards-compatible helper."""
-        return self.detect_mode(message) == PromptMode.ADVICE
 
     # ── Prompt builder ───────────────────────────────────────────────────────
 

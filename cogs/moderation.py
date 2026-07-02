@@ -19,6 +19,8 @@ from bot.word_filter import (
     FILTERED_WORDS,
     add_word, remove_word, clear_all_words,
 )
+from bot.utils import parse_duration, fmt_duration
+from bot.moderation import auto_unmute
 
 _MSG_LINK_RE          = re.compile(r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)")
 _MENTION_AVOIDANCE_RE = re.compile(r"@everyone|@here")
@@ -258,8 +260,8 @@ class ModerationCog(commands.Cog, name="Moderation"):
                     warn_embed.set_footer(text=f"Warned by {interaction.user.display_name}")
                     warn_msg = await muted_ch.send(embed=warn_embed)
                     await warn_msg.delete(delay=180)
-                from bot.moderation import auto_unmute
                 task = asyncio.create_task(auto_unmute(member, muted_role, 600, muted_ch, self.bot))
+                self.bot._mute_tasks[member.id] = task
             except discord.Forbidden:
                 pass
 
@@ -269,7 +271,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         if not has_permission(interaction.user, "mute"):
             await interaction.response.send_message("⛔ You don't have permission to mute users.", ephemeral=True)
             return
-        from bot.utils import parse_duration, fmt_duration
         dur = parse_duration(duration) if duration else None
         from datetime import timedelta as _td
         dur = dur or _td(minutes=10)
@@ -301,7 +302,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
                 mute_embed.set_footer(text=f"Muted by {interaction.user.display_name}")
                 mute_msg = await muted_ch.send(embed=mute_embed)
                 await mute_msg.delete(delay=180)
-            from bot.moderation import auto_unmute
             task = asyncio.create_task(auto_unmute(member, muted_role, int(dur.total_seconds()), muted_ch, self.bot))
             self.bot._mute_tasks[member.id] = task
         except discord.Forbidden:

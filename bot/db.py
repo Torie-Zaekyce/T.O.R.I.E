@@ -3,6 +3,8 @@
 import os
 from datetime import datetime
 
+from bot.config import TIMEZONE
+
 import pymongo
 
 _MONGO_UNAVAILABLE = object()
@@ -78,6 +80,17 @@ def get_perm_col():
     return _perm_col
 
 
+_memory_col = None
+
+def get_memory_col():
+    global _memory_col
+    if _memory_col is None:
+        c = _get_client()
+        if c:
+            _memory_col = c["torie"]["user_memory"]
+    return _memory_col
+
+
 # ---------------------------------------------------------------------------
 # Birthdays
 # ---------------------------------------------------------------------------
@@ -114,7 +127,7 @@ def delete_birthday(user_id: str):
 
 
 def get_todays_birthdays(birthdays: dict) -> list[dict]:
-    now = datetime.utcnow()
+    now = datetime.now(TIMEZONE)
     today = (now.month, now.day)
     return [
         {"name": data.get("name", key), **data}

@@ -70,12 +70,27 @@ def contains_filtered_word(content: str) -> str | None:
     for token in tokens:
         if token in FILTER_WHITELIST:
             continue
-        if normalize(token) in _NORM_SLURS:
-            return _NORM_SLURS[normalize(token)]
+        normed = normalize(token)
+        if normed in _NORM_SLURS:
+            return _NORM_SLURS[normed]
 
     norm_full = normalize(content)
     for slur_norm, slur_orig in _NORM_SLURS.items():
-        if slur_norm in norm_full:
+        idx = norm_full.find(slur_norm)
+        if idx == -1:
+            continue
+        slur_end = idx + len(slur_norm)
+        # Skip if this substring overlap is inside a whitelisted word
+        overrides_whitelist = False
+        for wl_word in FILTER_WHITELIST:
+            wl_norm = normalize(wl_word)
+            wl_idx = norm_full.find(wl_norm)
+            if wl_idx != -1:
+                wl_end = wl_idx + len(wl_norm)
+                if idx < wl_end and slur_end > wl_idx:
+                    overrides_whitelist = True
+                    break
+        if not overrides_whitelist:
             return slur_orig
 
     return None
