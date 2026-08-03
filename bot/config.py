@@ -78,3 +78,18 @@ CONTEXT_NOTES: dict[str, str] = {
     "sister_kio": "your Sister, Kio. Treat her with extra warmth and love.",
     "broinlaw_haru": "your Brother In Law, Haru. Treat him with extra cheekiness and warmth.",
 }
+
+# Spontaneous chat behavior (lively-chat joins + greeting replies).
+# Tweakable at runtime by parents via t!settings / /settings; overrides persist in MongoDB.
+SPONTANEOUS_DEFAULTS: dict = {
+    "enabled":            True,
+    "join_enabled":       True,
+    "join_threshold":     5,        # messages needed in the window before joining
+    "join_window":        60,       # seconds in which the messages must arrive
+    "join_cooldown":      120,      # seconds between spontaneous joins per channel
+    "join_min_authors":   2,        # distinct authors required so one spammer doesn't trigger it
+    "greet_enabled":      True,
+    "greet_cooldown":     30,       # seconds between greeting replies per channel
+    "greet_user_cooldown": 60,      # seconds before greeting the same user again
+    "channels":           [GENERAL_CHANNEL],
+}

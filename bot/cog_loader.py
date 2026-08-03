@@ -7,6 +7,7 @@ COGS = [
     "cogs.memory",
     "cogs.interactions",
     "cogs.voice",
+    "cogs.settings",
 ]
 
 

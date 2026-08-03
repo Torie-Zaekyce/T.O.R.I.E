@@ -228,3 +228,37 @@ def revoke_perm(user_id: int, perm: str) -> bool:
     except Exception as e:
         print(f"⚠️ Failed to revoke perm: {e}")
         return False
+
+
+_settings_col = None
+
+
+def get_settings_col():
+    global _settings_col
+    if _settings_col is None:
+        c = _get_client()
+        if c:
+            _settings_col = c["torie"]["settings"]
+    return _settings_col
+
+
+def load_settings() -> dict:
+    col = get_settings_col()
+    if col is None:
+        return {}
+    try:
+        doc = col.find_one({"_id": "spontaneous"})
+        return dict(doc.get("data", {})) if doc and "data" in doc else {}
+    except Exception as e:
+        print(f"⚠️ Failed to load settings: {e}")
+        return {}
+
+
+def save_settings(data: dict):
+    col = get_settings_col()
+    if col is None:
+        return
+    try:
+        col.replace_one({"_id": "spontaneous"}, {"_id": "spontaneous", "data": data}, upsert=True)
+    except Exception as e:
+        print(f"⚠️ Failed to save settings: {e}")

@@ -99,6 +99,12 @@ _HELP_SECTIONS = [
         "`@T.O.R.I.E. battleship` — Start Battleship\n"
         "`t!board` — Show the current game board"
     )),
+    ("⚙️ Settings", (
+        "`t!settings` — View spontaneous chat settings\n"
+        "`t!settings set <key> <value>` — Tweak a setting *(parents only)*\n"
+        "`t!settings channels add/remove/clear <channel>` — Pick channels *(parents only)*\n"
+        "`t!settings on/off/reset` — Master switch *(parents only)*"
+    )),
 ]
 
 
