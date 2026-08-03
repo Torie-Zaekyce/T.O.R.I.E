@@ -12,6 +12,11 @@ T.O.R.I.E. is a feature-rich Discord bot designed for a private server. She chat
 ### 🤖 AI Chat
 T.O.R.I.E. responds when mentioned. She has a distinct personality — sarcastic, warm, occasionally wise — powered by Groq's LLaMA models. She reacts to images, stickers, and knows how to switch to a softer tone when someone needs it. She also gives genuine advice when asked.
 
+### 💬 Spontaneous Replies
+Sometimes T.O.R.I.E. talks unprompted. When a channel suddenly gets lively — `join_threshold` (default **5**) messages from at least 2 different people within `join_window` (default **60s**) — she jumps in with an in-character reaction to the topic. She also greets plain hellos (`hi`, `hello`, `hey`, `good morning`, …) in allowed channels, but ignores duplicate greetings so she never responds to a whole "hi" wave.
+
+Both behaviors are fully configurable by parents — message count, time window, cooldowns, on/off toggles, and which channels are eligible — via `t!settings` (or `/settings`). Changes are saved to MongoDB and survive restarts.
+
 ### 🎂 Birthdays
 Users register their own birthdays. T.O.R.I.E. announces them at midnight PHT in a dedicated birthday channel with a role ping.
 
@@ -35,7 +40,7 @@ Automatic messages at 7AM, 12PM, 7PM, 7:30PM, and midnight PHT — morning greet
 T.O.R.I.E. quietly remembers facts about people from conversation — likes, dislikes, running jokes — and brings them up naturally later. Parents can view, add, remove, or wipe anyone's stored memory with `t!memory`.
 
 ### 🎮 Minigames
-Start a quick game by mentioning her — chess (with a basic AI opponent), tic-tac-toe, or battleship. Game state is stored in MongoDB so sessions survive restarts. Check the current board anytime with `t!board`.
+Start a quick game by mentioning her — chess (with a basic AI opponent), tic-tac-toe, or battleship. Sessions are tracked in memory and expire after 30 minutes of inactivity. Check the current board anytime with `t!board`.
 
 ### 📨 Anonymous Messaging
 `/sendmsg #channel message` — T.O.R.I.E. sends the message from her account. Only you see the confirmation. Useful for announcements without revealing who sent them.
@@ -72,6 +77,7 @@ T.O.R.I.E./
 │   ├── word_filter.py         ← word filter normalization, cache, detection
 │   ├── config.py              ← centralized constants, API keys, channel IDs
 │   ├── utils.py                ← helper functions (parse_duration, sanitize_input, fetch_reply_chain)
+│   ├── chat_activity.py        ← lively-chat join + greeting detection trackers
 │   ├── moderation_handlers.py      ← moderation logic (warn, mute, unmute, auto-unmute)
 │   ├── personality.py            ← AI personality, system prompt, custom traits
 │   ├── user_memory.py             ← MongoDB user memory and fact extraction
@@ -86,7 +92,8 @@ T.O.R.I.E./
 │   ├── personality.py             ← t!personality (add / remove / list / clear)
 │   ├── permissions.py              ← t!perm (add / remove / list)
 │   ├── memory.py                    ← t!memory (view / add / remove / clear / delete / list)
-│   └── interactions.py               ← GIF interactions, t!tor, t!board
+│   ├── interactions.py               ← GIF interactions, t!tor, t!board
+│   └── settings.py                   ← t!settings / /settings (spontaneous behavior)
 │
 ├── .env                      ← local secrets (never commit)
 ├── .env.example              ← key template
@@ -102,10 +109,11 @@ T.O.R.I.E./
 
 - **bot/family.py** — Family role dictionaries and `get_role()` lookup helpers
 - **bot/perms.py** — `has_permission()` checks, valid permission list, family default perm table
-- **bot/db.py** — Single MongoDB client + every collection's CRUD functions (birthdays, warns, perms, filter words)
+- **bot/db.py** — Single MongoDB client + every collection's CRUD functions (birthdays, warns, perms, filter words, settings)
 - **bot/word_filter.py** — Leet-speak normalization, filtered word cache, detection logic
 - **bot/config.py** — All constants, channel IDs, model names, and regex patterns compiled at import time for performance
 - **bot/utils.py** — Reusable functions for text processing, duration parsing, and Discord context handling
+- **bot/chat_activity.py** — Sliding-window chat tracking, greeting detection, and anti-spam guards for spontaneous replies
 - **bot/moderation_handlers.py** — Self-contained moderation logic with embed creation and role management
 - **bot/personality.py** — AI personality system with advice detection and custom traits
 - **bot/user_memory.py** — MongoDB integration for persistent user facts and memory extraction
@@ -156,7 +164,7 @@ T.O.R.I.E. will auto-create these collections inside a `torie` database:
 | `warns` | User warning history |
 | `permissions` | Custom permission grants |
 | `user_memory` | User facts and interaction history |
-| `game_sessions` | Active/recent minigame board state |
+| `settings` | Spontaneous-reply settings (`t!settings` changes) |
 
 ### 5. Run locally
 ```bash
@@ -188,6 +196,21 @@ python main.py
 | `tor hug @user` | Prefix-free shortcut |
 | `@T.O.R.I.E. let's play chess / tic tac toe / battleship` | Start a minigame |
 | `t!board` | Show the current game board |
+
+### ⚙️ Settings
+Controls T.O.R.I.E.'s spontaneous replies — lively-chat joins and hello greetings. Mirrored as `/settings` slash commands. Changes are saved to MongoDB and survive restarts.
+
+| Command | Description | Permission |
+|---|---|---|
+| `t!settings` | View current settings | anyone |
+| `t!settings set <key> <value>` | Tweak a setting | parents |
+| `t!settings channels add <#channel>` | Allow spontaneous replies in a channel | parents |
+| `t!settings channels remove <#channel>` | Stop spontaneous replies in a channel | parents |
+| `t!settings channels clear` | Disable everywhere | parents |
+| `t!settings on` / `t!settings off` | Master switch | parents |
+| `t!settings reset` | Restore defaults | parents |
+
+**Keys & defaults:** `enabled` (on) · `join_enabled` (on) · `join_threshold` (5) · `join_window` (60s) · `join_cooldown` (120s) · `join_min_authors` (2) · `greet_enabled` (on) · `greet_cooldown` (30s) · `greet_user_cooldown` (60s) · `channels` (managed via `channels add/remove/clear`)
 
 ### 🚫 Moderation
 | Command | Description | Permission |
