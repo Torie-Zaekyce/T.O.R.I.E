@@ -1,13 +1,6 @@
-# bot/bot.py — cog loading (replace your existing setup_commands() call with this)
-#
-# In your main async setup / on_ready, call:
-#
-#   await load_cogs(bot)
-#   await bot.tree.sync()      # only needed once after slash commands change
-
 COGS = [
     "cogs.general",
-    "cogs.moderation",
+    "cogs.moderation_commands",
     "cogs.birthday",
     "cogs.personality",
     "cogs.permissions",

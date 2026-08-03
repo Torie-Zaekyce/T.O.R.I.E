@@ -149,8 +149,6 @@ class MemoryCog(commands.Cog, name="Memory"):
         await ctx.send(embed=embed)
 
 
-    # ── Slash commands ───────────────────────────────────────────────────────
-
     memory_slash = discord.app_commands.Group(name="memory", description="View and manage user memories")
 
     @memory_slash.command(name="view", description="View memories for yourself or another user")

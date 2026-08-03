@@ -211,8 +211,6 @@ class GeneralCog(commands.Cog, name="General"):
         await ctx.send(embed=_build_family_embed())
 
 
-    # ── Slash commands ───────────────────────────────────────────────────────
-
     @discord.app_commands.command(name="ping", description="Check if I'm alive + latency")
     async def ping_slash(self, interaction: discord.Interaction):
         latency = round(self.bot.latency * 1000)

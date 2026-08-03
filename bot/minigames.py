@@ -1,17 +1,13 @@
 # bot/minigames.py — T.O.R.I.E. Minigame Session Manager
 #
 # Owns all stateful game logic (session lifecycle, per-game prompts,
-# start/end detection). bot.py imports from here; adding a new game
+# start/end detection). main.py imports from here; adding a new game
 # means only touching this file.
 
 import asyncio
 import re
 import discord
 
-
-# ---------------------------------------------------------------------------
-# Session config
-# ---------------------------------------------------------------------------
 
 SESSION_TIMEOUT = 30 * 60
 
@@ -41,10 +37,6 @@ BATTLESHIP_END = re.compile(
     r"\b(you sank my|i sank your|all ships|game over|surrender|gg|good game)\b",
     re.IGNORECASE,
 )
-
-# ---------------------------------------------------------------------------
-# System notes
-# ---------------------------------------------------------------------------
 
 CHESS_SYSTEM_NOTE = (
     "You are playing a text-based chess game with the user via Discord reply chain. "
@@ -88,10 +80,6 @@ GAMES: dict[str, dict] = {
         "system_note": BATTLESHIP_SYSTEM_NOTE,
     },
 }
-
-# ---------------------------------------------------------------------------
-# Session
-# ---------------------------------------------------------------------------
 
 class Session:
     __slots__ = ("last_active", "kind", "system_note")

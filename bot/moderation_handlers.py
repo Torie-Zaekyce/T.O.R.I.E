@@ -60,9 +60,12 @@ async def handle_warn(
                 warn_embed.set_footer(text=f"Warned by {message.author.display_name}")
                 warn_msg = await muted_ch.send(embed=warn_embed)
                 await warn_msg.delete(delay=180)
+            if target.id in bot._mute_tasks:
+                bot._mute_tasks[target.id].cancel()
             task = asyncio.create_task(
                 auto_unmute(target, muted_role, 600, muted_ch, bot)
             )
+            bot._mute_tasks[target.id] = task
         except discord.Forbidden:
             pass
 

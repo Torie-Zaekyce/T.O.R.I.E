@@ -1,5 +1,6 @@
 # cogs/interactions.py — GIF interactions (hug, kiss, pat, …) + t!board
 
+import asyncio
 import os
 import random
 
@@ -97,11 +98,16 @@ async def _send_board(
         await send_func("❓ Unknown game type.")
         return
     board_embed = None
-    async for msg in channel.history(limit=40):
-        if msg.author == bot.user and pattern.search(msg.content):
-            _, board_embed = extract_board_snapshot(msg.content, session.kind)
-            if board_embed:
-                break
+    await asyncio.sleep(0.5)
+    try:
+        async for msg in channel.history(limit=40):
+            if msg.author == bot.user and pattern.search(msg.content):
+                _, board_embed = extract_board_snapshot(msg.content, session.kind)
+                if board_embed:
+                    break
+    except discord.HTTPException:
+        await send_func("⚠️ Couldn't fetch board history — try again in a moment.")
+        return
     if board_embed is None:
         await send_func(embed=discord.Embed(
             description="⚠️ No board snapshot found yet. Make a move first!",
@@ -138,7 +144,8 @@ class InteractionsCog(commands.Cog, name="Interactions"):
                 color=discord.Color.red()
             ))
             return
-        await _send_board(self.bot, interaction.channel, interaction.user, session, interaction.response.send_message)
+        await interaction.response.defer()
+        await _send_board(self.bot, interaction.channel, interaction.user, session, interaction.followup.send)
 
     @commands.command(name="tor")
     async def tor(self, ctx, action: str, target: discord.Member):

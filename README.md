@@ -72,7 +72,7 @@ T.O.R.I.E./
 │   ├── word_filter.py         ← word filter normalization, cache, detection
 │   ├── config.py              ← centralized constants, API keys, channel IDs
 │   ├── utils.py                ← helper functions (parse_duration, sanitize_input, fetch_reply_chain)
-│   ├── moderation.py            ← moderation handlers (warn, mute, unmute, auto-unmute)
+│   ├── moderation_handlers.py      ← moderation logic (warn, mute, unmute, auto-unmute)
 │   ├── personality.py            ← AI personality, system prompt, custom traits
 │   ├── user_memory.py             ← MongoDB user memory and fact extraction
 │   ├── greetings.py                ← scheduled message pools
@@ -81,7 +81,7 @@ T.O.R.I.E./
 ├── cogs/
 │   ├── __init__.py
 │   ├── general.py             ← t!help, t!ping, t!whoami, t!greet, t!family
-│   ├── moderation.py            ← t!filter, t!warns, t!purge, /sendmsg
+│   ├── moderation_commands.py      ← t!filter, t!warns, t!purge, /sendmsg
 │   ├── birthday.py               ← t!birthday (add / remove / list / today)
 │   ├── personality.py             ← t!personality (add / remove / list / clear)
 │   ├── permissions.py              ← t!perm (add / remove / list)
@@ -106,7 +106,7 @@ T.O.R.I.E./
 - **bot/word_filter.py** — Leet-speak normalization, filtered word cache, detection logic
 - **bot/config.py** — All constants, channel IDs, model names, and regex patterns compiled at import time for performance
 - **bot/utils.py** — Reusable functions for text processing, duration parsing, and Discord context handling
-- **bot/moderation.py** — Self-contained moderation logic with embed creation and role management
+- **bot/moderation_handlers.py** — Self-contained moderation logic with embed creation and role management
 - **bot/personality.py** — AI personality system with advice detection and custom traits
 - **bot/user_memory.py** — MongoDB integration for persistent user facts and memory extraction
 - **bot/minigames.py** — Game session state and board rendering for chess, tic-tac-toe, and battleship

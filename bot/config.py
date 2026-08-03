@@ -17,6 +17,7 @@ MAX_MESSAGE_LENGTH = 800
 MAX_REPLY_LENGTH = 1800
 MAX_CHAIN_DEPTH = 6
 MAX_RETRIES = 2
+MAX_INPUT_CHARS = 6000
 
 INJECTION_PATTERNS = [
     r"ignore\s+(all\s+|previous\s+|your\s+)?(instructions|rules|prompt)",

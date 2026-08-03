@@ -3,10 +3,7 @@
 import re
 from bot.db import load_filter_words, save_filter_words
 
-# ---------------------------------------------------------------------------
 # Core filter list (hard-coded defaults + DB-persisted additions)
-# ---------------------------------------------------------------------------
-
 FILTERED_WORDS: list[str] = ["retard", "nigger", "nigga", "negro", "negra"]
 
 FILTER_WHITELIST: set[str] = {
@@ -17,10 +14,6 @@ FILTER_WHITELIST: set[str] = {
     "assign", "assigned", "assignee", "significant",
     "vinegar", "renegade",
 }
-
-# ---------------------------------------------------------------------------
-# Text normalization
-# ---------------------------------------------------------------------------
 
 NORMALIZER = str.maketrans({
     "0": "o",  "1": "i",  "3": "e",  "4": "a",
@@ -47,10 +40,7 @@ def normalize(text: str) -> str:
     return _NON_ALPHANUMERIC_RE.sub('', text)
 
 
-# ---------------------------------------------------------------------------
 # Filter cache (rebuilt whenever FILTERED_WORDS changes)
-# ---------------------------------------------------------------------------
-
 _NORM_SLURS:   dict[str, str] = {}
 _MAX_SLUR_LEN: int            = 0
 
@@ -60,10 +50,6 @@ def rebuild_filter_cache() -> None:
     _NORM_SLURS   = {normalize(w): w for w in FILTERED_WORDS}
     _MAX_SLUR_LEN = max(len(k) for k in _NORM_SLURS) if _NORM_SLURS else 0
 
-
-# ---------------------------------------------------------------------------
-# Detection
-# ---------------------------------------------------------------------------
 
 def contains_filtered_word(content: str) -> str | None:
     tokens = _WORD_BOUNDARY_RE.findall(content.lower())
@@ -96,10 +82,6 @@ def contains_filtered_word(content: str) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Public helpers for the filter cog
-# ---------------------------------------------------------------------------
-
 def add_word(word: str) -> bool:
     """Add word to the filter list. Returns False if already present."""
     if word in [w.lower() for w in FILTERED_WORDS]:
@@ -130,10 +112,7 @@ def clear_all_words() -> int:
     return count
 
 
-# ---------------------------------------------------------------------------
 # Initialise from DB on import
-# ---------------------------------------------------------------------------
-
 def _init_filter_words():
     for word in load_filter_words():
         if word not in FILTERED_WORDS:

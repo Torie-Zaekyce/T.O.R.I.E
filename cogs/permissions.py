@@ -70,8 +70,6 @@ class PermissionsCog(commands.Cog, name="Permissions"):
         await ctx.send(embed=embed)
 
 
-    # ── Slash commands ───────────────────────────────────────────────────────
-
     perm_slash = discord.app_commands.Group(name="perm", description="Manage user permissions")
 
     @perm_slash.command(name="add", description="Grant a permission to a user (parents only)")

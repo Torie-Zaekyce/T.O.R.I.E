@@ -67,8 +67,6 @@ class PersonalityCog(commands.Cog, name="Personality"):
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} trait(s). Back to default me! 😊", color=discord.Color.green()))
 
 
-    # ── Slash commands ───────────────────────────────────────────────────────
-
     personality_slash = discord.app_commands.Group(name="personality", description="Manage custom personality traits")
 
     @personality_slash.command(name="add", description="Add a custom personality trait")

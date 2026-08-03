@@ -14,16 +14,16 @@ from bot.minigames import get_session, start_session, end_session, detect_game_s
 from bot.config import (
     DISCORD_TOKEN, GROQ_API_KEY, KLIPY_API_KEY,
     GROQ_MODEL, GROQ_FALLBACK, GROQ_VISION_MODEL,
-    MAX_MESSAGE_LENGTH, MAX_REPLY_LENGTH, INJECTION_REGEX,
+    MAX_MESSAGE_LENGTH, INJECTION_REGEX,
     TIMEZONE, GREET_HOUR, LUNCH_HOUR, DINNER_HOUR, DINNER_MINUTE,
     EVENING_HOUR, MIDNIGHT_HOUR, GENERAL_CHANNEL, BIRTHDAY_CHANNEL,
-    BIRTHDAY_PING_ROLE, GREETINGS, CONTEXT_NOTES, MAX_RETRIES
+    BIRTHDAY_PING_ROLE, GREETINGS, CONTEXT_NOTES, MAX_RETRIES, MAX_INPUT_CHARS
 )
 from bot.utils import (
     parse_duration, fmt_duration, sanitize_input,
     sanitize_reply, fetch_reply_chain
 )
-from bot.moderation import (
+from bot.moderation_handlers import (
     handle_warn, handle_mute, handle_unmute,
 )
 from cogs.interactions import _INTERACTION_ACTIONS, _search_klipy_gif
@@ -32,6 +32,7 @@ import random
 import asyncio
 import re
 import os
+import time
 
 if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing!"); exit(1)
@@ -47,6 +48,7 @@ except Exception as e:
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="t!", help_command=None, intents=intents)
+bot._mute_tasks = {}
 
 # ─── Torie class ──────────────────────────────────────────────────────────────
 
@@ -62,16 +64,36 @@ class Torie(ToriePersonality):
             f"<@!{bot_user.id}>" in message.content
         )
 
+    @staticmethod
+    def _truncate_messages(messages: list) -> list:
+        total = sum(len(m.get("content", "")) for m in messages if isinstance(m.get("content"), str))
+        if total <= MAX_INPUT_CHARS:
+            return messages
+        truncated = []
+        budget = MAX_INPUT_CHARS
+        for m in messages:
+            content = m.get("content", "")
+            if isinstance(content, str) and len(content) > budget:
+                content = content[:budget] + "… [truncated]"
+                budget = 0
+            else:
+                budget -= len(content) if isinstance(content, str) else 0
+            truncated.append({**m, "content": content})
+        return truncated
+
     def _call_groq(self, messages: list, max_tokens: int) -> str:
-        for model in [GROQ_MODEL, GROQ_FALLBACK]:
+        messages = self._truncate_messages(messages)
+        for attempt, model in enumerate([GROQ_MODEL, GROQ_FALLBACK]):
             try:
                 response = groq_client.chat.completions.create(
                     model=model, messages=messages, max_tokens=max_tokens, temperature=0.8,
                 )
                 return response.choices[0].message.content
             except Exception as e:
-                if "429" in str(e) and model != GROQ_FALLBACK:
-                    print(f"⚠️ Rate limit on {model} — trying fallback")
+                if "429" in str(e):
+                    wait = 2 ** attempt + random.uniform(0, 1)
+                    print(f"⚠️ Rate limit on {model} — retrying in {wait:.1f}s")
+                    time.sleep(wait)
                     continue
                 raise
 
@@ -98,18 +120,27 @@ class Torie(ToriePersonality):
             if user_text else
             "Describe and react to this image in T.O.R.I.E.'s character — sarcastic, funny, warm. One or two sentences max."
         )
-        response = groq_client.chat.completions.create(
-            model    = GROQ_VISION_MODEL,
-            messages = [
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": [
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                    {"type": "text",      "text": prompt_text},
-                ]},
-            ],
-            max_tokens=80, temperature=0.8,
-        )
-        return response.choices[0].message.content
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
+            {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": image_url}},
+                {"type": "text",      "text": prompt_text},
+            ]},
+        ]
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = groq_client.chat.completions.create(
+                    model=GROQ_VISION_MODEL, messages=messages, max_tokens=80, temperature=0.8,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                if "429" in str(e):
+                    wait = 2 ** attempt + random.uniform(0, 1)
+                    print(f"⚠️ Vision rate limit — retrying in {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+                raise
+        return "I tried to look but something went blurry. 👀"
 
 
 torie = Torie()
@@ -181,8 +212,6 @@ async def _handle_ai_reply(message: discord.Message, clean_msg: str, role_key: s
     async with message.channel.typing():
         try:
             reply = _generate_reply(contexted_msg, history, session)
-            if len(reply) > MAX_REPLY_LENGTH:
-                reply = reply[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
         except Exception as e:
             print(f"❌ Generation error: {e}")
             reply = "Hmm, my brain glitched. Try again? 😅"
@@ -280,11 +309,14 @@ async def on_message(message: discord.Message):
 
     if contains_filtered_word(message.content):
         try:
+            await asyncio.sleep(0.3)
             await message.delete()
             warning = await message.channel.send(f"⚠️ Hey {message.author.mention}, watch the language please! 😤")
             await warning.delete(delay=5)
         except discord.Forbidden:
             print(f"⚠️ Missing permissions in #{message.channel.name}")
+        except discord.HTTPException:
+            print(f"⚠️ Rate-limited while filtering in #{message.channel.name}")
         return
 
     # "tor <action> @user" — no prefix needed
@@ -325,7 +357,6 @@ async def on_message(message: discord.Message):
         )
         return
 
-    # Sticker
     if message.stickers:
         async with message.channel.typing():
             try:
@@ -335,7 +366,6 @@ async def on_message(message: discord.Message):
         await message.reply(sanitize_reply(reply), mention_author=False)
         return
 
-    # Image attachment
     if message.attachments:
         att = message.attachments[0]
         if any(att.filename.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp")):
@@ -354,7 +384,6 @@ async def on_message(message: discord.Message):
     lowered = clean_msg.lower()
     targets = [u for u in message.mentions if u != bot.user]
 
-    # GIF interactions (mention-based: "@T.O.R.I.E. hug @user")
     for action, (text_template, query) in _INTERACTION_ACTIONS.items():
         if re.search(rf'\b{action}\b', lowered) and targets:
             target  = targets[0]
@@ -372,22 +401,18 @@ async def on_message(message: discord.Message):
         print(f"⚠️ Injection blocked from {message.author} ({message.author.id})")
         return
 
-    # Warn
     if targets and re.search(r'\bwarn\b', lowered):
         await handle_warn(message, targets, clean_msg, bot)
         return
 
-    # Mute
     if targets and re.search(r'\bmute\b', lowered) and not re.search(r'\bunmute\b', lowered):
-        await handle_mute(message, targets, clean_msg, bot, _mute_tasks)
+        await handle_mute(message, targets, clean_msg, bot, bot._mute_tasks)
         return
 
-    # Unmute
     if targets and re.search(r'\bunmute\b', lowered):
-        await handle_unmute(message, targets, bot, _mute_tasks)
+        await handle_unmute(message, targets, bot, bot._mute_tasks)
         return
 
-    # Length / injection check
     clean_msg, rejection = sanitize_input(clean_msg)
     if rejection == "too_long":
         await message.channel.send("⚠️ Too Long Didn't Read. Congratulations or Sorry for what happened 😅")

@@ -1,4 +1,4 @@
-# cogs/moderation.py — Moderation: filter, warns, purge, /sendmsg
+# cogs/moderation_commands.py — Moderation: filter, warns, purge, /sendmsg
 
 import asyncio
 import io
@@ -20,7 +20,7 @@ from bot.word_filter import (
     add_word, remove_word, clear_all_words,
 )
 from bot.utils import parse_duration, fmt_duration
-from bot.moderation import auto_unmute
+from bot.moderation_handlers import auto_unmute
 
 _MSG_LINK_RE          = re.compile(r"https?://(?:ptb\.|canary\.)?discord(?:app)?\.com/channels/(\d+)/(\d+)/(\d+)")
 _MENTION_AVOIDANCE_RE = re.compile(r"@everyone|@here")
@@ -30,10 +30,6 @@ _MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 class ModerationCog(commands.Cog, name="Moderation"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # -----------------------------------------------------------------------
-    # t!filter
-    # -----------------------------------------------------------------------
 
     @commands.group(name="filter", invoke_without_command=True)
     async def filter_group(self, ctx):
@@ -87,10 +83,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         count = clear_all_words()
         await ctx.send(embed=discord.Embed(description=f"✅ Cleared all {count} filtered word(s). 🧹", color=discord.Color.green()))
 
-    # -----------------------------------------------------------------------
-    # t!warns
-    # -----------------------------------------------------------------------
-
     @commands.command(name="warns")
     async def warns_cmd(self, ctx, member: discord.Member = None, action: str = None):
         if not member:
@@ -121,12 +113,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         )
         embed.set_footer(text=f"{len(warns)} warning(s) total")
         await ctx.send(embed=embed)
-
-    # -----------------------------------------------------------------------
-    # t!purge
-    # -----------------------------------------------------------------------
-
-    # ── Slash: filter group ──────────────────────────────────────────────────
 
     filter_group_slash = discord.app_commands.Group(name="filter", description="Manage the word filter")
 
@@ -177,8 +163,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         count = clear_all_words()
         await interaction.response.send_message(f"✅ Cleared all {count} filtered word(s). 🧹")
 
-    # ── Slash: warns ─────────────────────────────────────────────────────────
-
     @discord.app_commands.command(name="warns", description="View or clear a user's warnings")
     @discord.app_commands.describe(member="The user to check", action="Optionally clear all warnings")
     @discord.app_commands.choices(action=[
@@ -211,8 +195,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         embed.set_footer(text=f"{len(warns)} warning(s) total")
         await interaction.response.send_message(embed=embed)
 
-    # ── Slash: purge ─────────────────────────────────────────────────────────
-
     @discord.app_commands.command(name="purge", description="Bulk delete messages (1-100)")
     @discord.app_commands.describe(amount="Number of messages to delete (1-100)")
     async def purge_slash(self, interaction: discord.Interaction, amount: int):
@@ -228,8 +210,8 @@ class ModerationCog(commands.Cog, name="Moderation"):
             await interaction.followup.send(f"🗑️ Deleted **{len(deleted)}** message(s).")
         except discord.Forbidden:
             await interaction.followup.send("⛔ I don't have permission to delete messages here.")
-
-    # ── Slash: warn / mute / unmute ──────────────────────────────────────────
+        except discord.HTTPException:
+            await interaction.followup.send("⚠️ Hit a rate limit. Try fewer messages or wait a moment.")
 
     @discord.app_commands.command(name="warn", description="Warn a user with auto-mute for 10 minutes")
     @discord.app_commands.describe(member="The user to warn", reason="Reason for the warning")
@@ -344,12 +326,8 @@ class ModerationCog(commands.Cog, name="Moderation"):
             await confirm.delete(delay=3)
         except discord.Forbidden:
             await ctx.send(embed=discord.Embed(description="⛔ I don't have permission to delete messages here.", color=discord.Color.red()))
-        except Exception as e:
-            print(f"❌ Purge error: {e}")
-
-    # -----------------------------------------------------------------------
-    # /sendmsg  (slash command)
-    # -----------------------------------------------------------------------
+        except discord.HTTPException:
+            await ctx.send("⚠️ Hit a rate limit. Try fewer messages or wait a moment.")
 
     @discord.app_commands.command(name="sendmsg", description="Send a message and/or file to a channel as T.O.R.I.E.")
     @discord.app_commands.describe(

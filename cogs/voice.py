@@ -113,8 +113,6 @@ class VoiceCog(commands.Cog, name="Voice"):
             task.cancel()
 
 
-    # ── Slash commands ───────────────────────────────────────────────────────
-
     @discord.app_commands.command(name="join", description="Join your voice channel")
     async def join_slash(self, interaction: discord.Interaction):
         if not interaction.user.voice or not interaction.user.voice.channel:

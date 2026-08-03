@@ -21,7 +21,6 @@ if not DISCORD_TOKEN:
     print("❌ DISCORD_TOKEN is missing from .env")
     sys.exit(1)
 
-# ANSI colour helpers
 _RESET   = "\033[0m"
 _BOLD    = "\033[1m"
 _CYAN    = "\033[96m"
@@ -37,9 +36,6 @@ def _c(text, *codes): return "".join(codes) + str(text) + _RESET
 def _ts(): return _c(datetime.now().strftime("%H:%M:%S"), _GREY)
 
 
-# ---------------------------------------------------------------------------
-# Help text
-# ---------------------------------------------------------------------------
 _TORIE_COMMANDS = """
   {title}
 
@@ -132,7 +128,6 @@ _TORIE_COMMANDS = """
 #   aliases: additional names the user may type that map to this sub
 # ---------------------------------------------------------------------------
 _CMD_TABLE: dict[str, tuple[str, list[str]]] = {
-    # General
     "ping":        ("prefix",  []),
     "whoami":      ("prefix",  []),
     "greet":       ("prefix",  []),
@@ -144,25 +139,18 @@ _CMD_TABLE: dict[str, tuple[str, list[str]]] = {
     "unmute":      ("mention", []),
     "warn":        ("mention", []),
 
-    # Warns (prefix, handled by setup_commands / t!warns)
     "warns":       ("prefix",  []),
 
-    # Word filter
     "filter":      ("prefix",  []),
 
-    # Permissions
     "perm":        ("prefix",  ["perms"]),
 
-    # Birthdays
     "birthday":    ("prefix",  ["bday"]),
 
-    # Personality
     "personality": ("prefix",  ["persona"]),
 
-    # Memory
     "memory":      ("prefix",  ["mem"]),
 
-    # Interactions
     "hug":         ("prefix",  []),
     "kiss":        ("prefix",  []),
     "pat":         ("prefix",  []),
@@ -174,7 +162,6 @@ _CMD_TABLE: dict[str, tuple[str, list[str]]] = {
     "tor":         ("prefix",  []),
 }
 
-# Build reverse-alias lookup: alias → canonical name
 _ALIAS_MAP: dict[str, str] = {}
 for _canonical, (_mode, _aliases) in _CMD_TABLE.items():
     for _alias in _aliases:
@@ -192,10 +179,6 @@ class TerminalClient(discord.Client):
         self._input_task: asyncio.Task | None = None
         self._voice_client: discord.VoiceClient | None = None
         self._tts_voice: str = "en-US-AriaNeural"
-
-    # -----------------------------------------------------------------------
-    # Discord events
-    # -----------------------------------------------------------------------
 
     async def on_ready(self):
         print()
@@ -231,10 +214,6 @@ class TerminalClient(discord.Client):
             print(f"\r{prefix}: {content}{attachments}{embeds}")
             print(_c(">>> ", _YELLOW), end="", flush=True)
 
-    # -----------------------------------------------------------------------
-    # Input loop
-    # -----------------------------------------------------------------------
-
     async def _input_loop(self):
         loop = asyncio.get_running_loop()
         print(_c(">>> ", _YELLOW), end="", flush=True)
@@ -252,10 +231,6 @@ class TerminalClient(discord.Client):
                 continue
 
             await self._handle_command(line)
-
-    # -----------------------------------------------------------------------
-    # Command dispatcher
-    # -----------------------------------------------------------------------
 
     async def _handle_command(self, line: str):
         parts = line.split(None, 1)
@@ -327,10 +302,6 @@ class TerminalClient(discord.Client):
 
         print(_c(">>> ", _YELLOW), end="", flush=True)
 
-    # -----------------------------------------------------------------------
-    # /t  — bot command passthrough
-    # -----------------------------------------------------------------------
-
     async def _cmd_bot_passthrough(self, rest: str):
         """
         Translate /t <subcommand> [args] into the correct bot message format
@@ -355,7 +326,6 @@ class TerminalClient(discord.Client):
         sub_raw  = parts[0].lower()
         sub_rest = parts[1] if len(parts) > 1 else ""
 
-        # Resolve alias → canonical name
         sub = _ALIAS_MAP.get(sub_raw, sub_raw)
 
         if sub not in _CMD_TABLE:
@@ -372,7 +342,6 @@ class TerminalClient(discord.Client):
         elif send_mode == "mention":
             bot_msg = f"<@{self.user.id}> {sub} {sub_rest}".strip()
         else:
-            # "raw" — pass through exactly as typed
             bot_msg = rest.strip()
 
         try:
@@ -382,10 +351,6 @@ class TerminalClient(discord.Client):
             print(_c("  ❌ No permission to send in that channel.", _RED))
         except Exception as e:
             print(_c(f"  ❌ Error: {e}", _RED))
-
-    # -----------------------------------------------------------------------
-    # Terminal-native commands
-    # -----------------------------------------------------------------------
 
     async def _cmd_watch(self, parts: list):
         if len(parts) < 2:
@@ -630,10 +595,6 @@ class TerminalClient(discord.Client):
                 active = _c(" ◄", _GREEN) if n == self._tts_voice else ""
                 print(f"{label} {n}{active}")
         print()
-
-    # -----------------------------------------------------------------------
-    # Resolvers
-    # -----------------------------------------------------------------------
 
     def _resolve_voice_channel(self, target: str) -> discord.VoiceChannel | None:
         if target.isdigit():

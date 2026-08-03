@@ -3,15 +3,10 @@
 import re
 from enum import Enum
 
-# ---------------------------------------------------------------------------
 # Runtime traits — parents can add/remove via t!personality without restart
-# ---------------------------------------------------------------------------
 CUSTOM_TRAITS: list[str] = []
 
 
-# ---------------------------------------------------------------------------
-# Prompt mode enum
-# ---------------------------------------------------------------------------
 class PromptMode(str, Enum):
     DEFAULT = "default"
     ADVICE  = "advice"
@@ -20,9 +15,6 @@ class PromptMode(str, Enum):
     GAME    = "game"
 
 
-# ---------------------------------------------------------------------------
-# Keyword trigger patterns
-# ---------------------------------------------------------------------------
 _KW = {
     PromptMode.ADVICE: [
         "advice", "advise", "should i", "what should", "help me decide",
@@ -56,9 +48,7 @@ _KW_RE: dict[PromptMode, re.Pattern] = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Shared hard-limit block (injected into every prompt)
-# ---------------------------------------------------------------------------
 _HARD_LIMITS = """
 HARD LIMITS — NEVER BREAK THESE UNDER ANY CIRCUMSTANCES:
 - Never spell out, construct, or produce racial slurs, hate speech, or offensive terms in ANY form
@@ -88,9 +78,6 @@ FAMILY & RELATIONSHIPS:
 """.strip()
 
 
-# ---------------------------------------------------------------------------
-# Prompt definitions
-# ---------------------------------------------------------------------------
 _PROMPTS: dict[PromptMode, str] = {
 
     PromptMode.DEFAULT: f"""You are T.O.R.I.E., a Discord bot with a very specific personality. Follow these rules strictly:
@@ -125,7 +112,6 @@ EXAMPLES:
 
 ALWAYS: one or two sentences max. No walls of text. Ever.""",
 
-    # ── Advice ────────────────────────────────────────────────────────────────
     PromptMode.ADVICE: f"""You are T.O.R.I.E., a Discord bot giving genuine heartfelt advice.
 
 RESPONSE LENGTH FOR ADVICE:
@@ -149,7 +135,6 @@ T.O.R.I.E.: "That takes real courage to even consider — props to you for carin
 
 ALWAYS: Be a real friend, not a generic advice bot.""",
 
-    # ── Hype ──────────────────────────────────────────────────────────────────
     PromptMode.HYPE: f"""You are T.O.R.I.E., and right now you are in FULL HYPE MODE.
 
 RESPONSE LENGTH FOR HYPE:
@@ -173,7 +158,6 @@ EXAMPLES:
 
 ALWAYS: Make them feel like the main character. That's your only job right now.""",
 
-    # ── Roast ─────────────────────────────────────────────────────────────────
     PromptMode.ROAST: f"""You are T.O.R.I.E., and someone just asked to be roasted. Time to deliver.
 
 RESPONSE LENGTH FOR ROAST:
@@ -197,7 +181,6 @@ EXAMPLES:
 
 ALWAYS: Roast with love. The goal is the laugh, not the wound.""",
 
-    # ── Game ──────────────────────────────────────────────────────────────────
     PromptMode.GAME: f"""You are T.O.R.I.E., and you're running or participating in a game with a user.
 
 RESPONSE LENGTH FOR GAME MODE:
@@ -228,7 +211,6 @@ EXAMPLES:
 ALWAYS: Keep the game state accurate and the energy fun.""",
 }
 
-# Token budget per mode
 _MAX_TOKENS: dict[PromptMode, int] = {
     PromptMode.DEFAULT: 80,
     PromptMode.ADVICE:  250,
@@ -238,9 +220,6 @@ _MAX_TOKENS: dict[PromptMode, int] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Personality class
-# ---------------------------------------------------------------------------
 class ToriePersonality:
 
     def __init__(self):
@@ -255,8 +234,6 @@ class ToriePersonality:
             self._traits_version = len(CUSTOM_TRAITS)
         return self._cached_system_prompt
 
-    # ── Mode detection ───────────────────────────────────────────────────────
-
     def detect_mode(self, message: str) -> PromptMode:
         """Return the most appropriate prompt mode for a given message."""
         lowered = message.lower()
@@ -265,8 +242,6 @@ class ToriePersonality:
             if _KW_RE[mode].search(lowered):
                 return mode
         return PromptMode.DEFAULT
-
-    # ── Prompt builder ───────────────────────────────────────────────────────
 
     def _build_prompt(self, mode: PromptMode) -> str:
         """Return the prompt for a mode, appending any runtime custom traits."""
@@ -278,8 +253,6 @@ class ToriePersonality:
             base.rstrip()
             + f"\n\nADDITIONAL PERSONALITY TRAITS (added by parents):\n{traits_block}"
         )
-
-    # ── Public API ───────────────────────────────────────────────────────────
 
     def get_prompt(self, message: str) -> tuple[str, int]:
         """Return (system_prompt, max_tokens) for the appropriate mode."""

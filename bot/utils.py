@@ -1,7 +1,8 @@
+import asyncio
 import re
 import discord
 from datetime import timedelta as _td
-from bot.config import INJECTION_REGEX, MAX_MESSAGE_LENGTH
+from bot.config import INJECTION_REGEX, MAX_MESSAGE_LENGTH, MAX_REPLY_LENGTH
 
 def parse_duration(text: str) -> _td | None:
     """Parse duration strings like '10m', '2h', '3d' into timedelta."""
@@ -52,8 +53,13 @@ def sanitize_input(text: str) -> tuple[str | None, str | None]:
 
 
 def sanitize_reply(text: str) -> str:
-    """Remove dangerous mentions from bot replies."""
-    return text.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+    """Remove dangerous mentions and injected instructions from bot replies."""
+    text = text.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
+    if INJECTION_REGEX.search(text):
+        return "I'm not sure what you're talking about. 😅"
+    if len(text) > MAX_REPLY_LENGTH:
+        text = text[:MAX_REPLY_LENGTH].rsplit(" ", 1)[0] + "…"
+    return text
 
 
 async def fetch_reply_chain(message: discord.Message, max_depth: int = 6) -> list[dict]:
@@ -68,12 +74,12 @@ async def fetch_reply_chain(message: discord.Message, max_depth: int = 6) -> lis
         if not ref:
             break
         try:
-            parent = (
-                ref.resolved
-                if isinstance(ref.resolved, discord.Message)
-                else await current.channel.fetch_message(ref.message_id)
-            )
-        except Exception:
+            if isinstance(ref.resolved, discord.Message):
+                parent = ref.resolved
+            else:
+                await asyncio.sleep(0.3)
+                parent = await current.channel.fetch_message(ref.message_id)
+        except discord.HTTPException:
             break
 
         content = parent.content or ""

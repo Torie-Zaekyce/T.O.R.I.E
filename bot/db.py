@@ -15,10 +15,6 @@ _warn_col     = None
 _perm_col     = None
 
 
-# ---------------------------------------------------------------------------
-# Connection
-# ---------------------------------------------------------------------------
-
 def _get_client():
     global _mongo_client
     if _mongo_client is _MONGO_UNAVAILABLE:
@@ -91,10 +87,6 @@ def get_memory_col():
     return _memory_col
 
 
-# ---------------------------------------------------------------------------
-# Birthdays
-# ---------------------------------------------------------------------------
-
 def load_birthdays() -> dict:
     col = get_birthday_col()
     if col is None:
@@ -136,10 +128,6 @@ def get_todays_birthdays(birthdays: dict) -> list[dict]:
     ]
 
 
-# ---------------------------------------------------------------------------
-# Filter words
-# ---------------------------------------------------------------------------
-
 def load_filter_words() -> list[str]:
     col = get_filter_col()
     if col is None:
@@ -165,10 +153,6 @@ def save_filter_words(words: list[str]):
     except Exception as e:
         print(f"⚠️ Failed to save filter words: {e}")
 
-
-# ---------------------------------------------------------------------------
-# Warnings
-# ---------------------------------------------------------------------------
 
 def load_warns(user_id: str) -> list:
     col = get_warn_col()
@@ -209,10 +193,6 @@ def clear_warns(user_id: str):
     except Exception as e:
         print(f"⚠️ Failed to clear warns: {e}")
 
-
-# ---------------------------------------------------------------------------
-# Permissions
-# ---------------------------------------------------------------------------
 
 def load_user_perms(user_id: int) -> set:
     col = get_perm_col()

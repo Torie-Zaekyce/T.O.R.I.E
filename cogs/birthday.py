@@ -85,10 +85,6 @@ class BirthdayCog(commands.Cog, name="Birthday"):
         self.bot = bot
         BIRTHDAYS.update(load_birthdays())
 
-    # -----------------------------------------------------------------------
-    # t!birthday
-    # -----------------------------------------------------------------------
-
     @commands.group(name="birthday", aliases=["bday"], invoke_without_command=True)
     async def birthday_group(self, ctx):
         embed = discord.Embed(
@@ -168,8 +164,6 @@ class BirthdayCog(commands.Cog, name="Birthday"):
             embed.set_footer(text="T.O.R.I.E. — sending birthday love 🎀")
             await ctx.send(embed=embed)
 
-
-    # ── Slash commands ───────────────────────────────────────────────────────
 
     birthday_slash = discord.app_commands.Group(name="birthday", description="Birthday registration and lookup")
 
