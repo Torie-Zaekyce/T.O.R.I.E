@@ -9,8 +9,8 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
 
-GROQ_MODEL = "openai/gpt-oss-120b"
-GROQ_FALLBACK = "openai/gpt-oss-20b"
+GROQ_MODEL = "groq/compound"
+GROQ_FALLBACK = "groq/compound-mini"
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
 
 MAX_MESSAGE_LENGTH = 800
