@@ -9,9 +9,22 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 KLIPY_API_KEY = os.getenv("KLIPY_API_KEY")
 
-GROQ_MODEL = "groq/compound"
-GROQ_FALLBACK = "groq/compound-mini"
+# llama-3.3-70b-versatile / llama-3.1-8b-instant / llama-4-scout were decommissioned (2026-08-16 / 07-17).
+# Replacements per Groq's migration guide; qwen3.6-27b is Preview tier but the only vision-capable option.
+# NOTE: groq/compound(-mini) also exist but are agentic (web search + code exec) — overkill for chat.
+GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_FALLBACK = "openai/gpt-oss-20b"
 GROQ_VISION_MODEL = "qwen/qwen3.6-27b"
+
+
+def reasoning_kwargs(model: str) -> dict:
+    """Per-model reasoning controls. Without these, gpt-oss/qwen burn completion
+    tokens on hidden chain-of-thought and return empty replies at low max_tokens."""
+    if model.startswith("openai/gpt-oss"):
+        return {"reasoning_effort": "low"}
+    if model.startswith("qwen/"):
+        return {"reasoning_effort": "none"}
+    return {}
 
 MAX_MESSAGE_LENGTH = 800
 MAX_REPLY_LENGTH = 1800

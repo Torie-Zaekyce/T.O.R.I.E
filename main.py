@@ -19,7 +19,7 @@ from bot.config import (
     TIMEZONE, GREET_HOUR, LUNCH_HOUR, DINNER_HOUR, DINNER_MINUTE,
     EVENING_HOUR, MIDNIGHT_HOUR, GENERAL_CHANNEL, BIRTHDAY_CHANNEL,
     BIRTHDAY_PING_ROLE, GREETINGS, CONTEXT_NOTES, MAX_RETRIES, MAX_INPUT_CHARS,
-    SPONTANEOUS_DEFAULTS
+    SPONTANEOUS_DEFAULTS, reasoning_kwargs
 )
 from bot.utils import (
     parse_duration, fmt_duration, sanitize_input,
@@ -91,9 +91,9 @@ class Torie(ToriePersonality):
         messages = self._truncate_messages(messages)
         for attempt, model in enumerate([GROQ_MODEL, GROQ_FALLBACK]):
             try:
-                response = groq_client.chat.completions.create(
-                    model=model, messages=messages, max_tokens=max_tokens, temperature=0.8,
-                )
+                kwargs = dict(model=model, messages=messages, max_tokens=max_tokens, temperature=0.8)
+                kwargs.update(reasoning_kwargs(model))
+                response = groq_client.chat.completions.create(**kwargs)
                 return response.choices[0].message.content
             except Exception as e:
                 if "429" in str(e):
@@ -135,9 +135,9 @@ class Torie(ToriePersonality):
         ]
         for attempt in range(MAX_RETRIES + 1):
             try:
-                response = groq_client.chat.completions.create(
-                    model=GROQ_VISION_MODEL, messages=messages, max_tokens=80, temperature=0.8,
-                )
+                kwargs = dict(model=GROQ_VISION_MODEL, messages=messages, max_tokens=80, temperature=0.8)
+                kwargs.update(reasoning_kwargs(GROQ_VISION_MODEL))
+                response = groq_client.chat.completions.create(**kwargs)
                 return response.choices[0].message.content
             except Exception as e:
                 if "429" in str(e):

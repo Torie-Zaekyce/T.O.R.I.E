@@ -52,8 +52,12 @@ def sanitize_input(text: str) -> tuple[str | None, str | None]:
     return text, None
 
 
+_THINK_RE = re.compile(r"<think>.*?(</think>|$)", re.DOTALL)
+
+
 def sanitize_reply(text: str) -> str:
     """Remove dangerous mentions and injected instructions from bot replies."""
+    text = _THINK_RE.sub("", text).strip()
     text = text.replace("@everyone", "@\u200beveryone").replace("@here", "@\u200bhere")
     if INJECTION_REGEX.search(text):
         return "I'm not sure what you're talking about. 😅"

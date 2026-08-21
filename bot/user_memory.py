@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 
+from bot.config import reasoning_kwargs
 from bot.db import get_memory_col
 
 MAX_FACTS = 20
@@ -157,7 +158,7 @@ def extract_and_save_facts(user_id: str, display_name: str, user_message: str, g
             "If nothing worth remembering exists, return an empty array []. "
             "Example output: [\"Likes playing Genshin Impact\", \"Studies computer science\"]"
         )
-        response = groq_client.chat.completions.create(
+        kwargs = dict(
             model=model,
             messages=[
                 {"role": "system", "content": prompt},
@@ -166,6 +167,8 @@ def extract_and_save_facts(user_id: str, display_name: str, user_message: str, g
             max_tokens=120,
             temperature=0.2,
         )
+        kwargs.update(reasoning_kwargs(model))
+        response = groq_client.chat.completions.create(**kwargs)
         raw = response.choices[0].message.content.strip()
         raw = _CODE_BLOCK_RE.sub("", raw).strip()
         facts = json.loads(raw)
